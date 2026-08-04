@@ -1,0 +1,436 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>
+<CodeBlocks_project_file>
+	<FileVersion major="1" minor="6" />
+	<Project>
+		<Option title="app" />
+		<Option pch_mode="2" />
+		<Option compiler="riscv32-v3" />
+		<Build>
+			<Target title="Debug">
+				<Option output="Output/bin/app.rv32" prefix_auto="1" extension_auto="0" />
+				<Option object_output="Output/obj/" />
+				<Option type="1" />
+				<Option compiler="riscv32-v3" />
+			</Target>
+		</Build>
+		<Compiler>
+			<Add option="-Os" />
+			<Add option="-Wall" />
+			<Add option="-march=rv32imc_zba_zbb_zbc_zbs_zca_zcb_zcmp_xbs1" />
+			<Add option="-Wno-array-bounds" />
+			<Add option="-Wno-address-of-packed-member" />
+			<Add option="-ffunction-sections" />
+			<Add option="-mjump-tables-in-text" />
+			<Add directory="." />
+			<Add directory="../../header" />
+			<Add directory="../../libs" />
+			<Add directory="../../libs/ble" />
+			<Add directory="../../libs/cpu" />
+			<Add directory="../../libs/usb" />
+			<Add directory="../../driver" />
+			<Add directory="../../modules/fota" />
+			<Add directory="../../modules/utils" />
+			<Add directory="../../modules/ble" />
+			<Add directory="../../modules/audio/dec" />
+			<Add directory="production_test" />
+			<Add directory="production_test/iodm" />
+			<Add directory="production_test/tbox" />
+			<Add directory="../../functions" />
+			<Add directory="../../bsp" />
+			<Add directory="../../modules" />
+			<Add directory="../../modules/wireless" />
+		</Compiler>
+		<Linker>
+			<Add option="-T$(TARGET_OBJECT_DIR)ram.o" />
+			<Add option="--gc-sections" />
+			<Add option="-Map=Output\bin\map.txt" />
+			<Add option="--no-warn-rwx-segments" />
+			<Add library="../../libs/cpu/libplatform.a" />
+			<Add library="../../libs/cpu/libm.a" />
+			<Add library="../../libs/cpu/libc.a" />
+			<Add library="../../libs/cpu/libgcc.a" />
+			<Add library="../../libs/ble/libbtstack.a" />
+		</Linker>
+		<ExtraCommands>
+			<Add before="Output\bin\prebuild.bat $(PROJECT_NAME)" />
+			<Add after="Output\bin\postbuild.bat $(PROJECT_NAME)" />
+		</ExtraCommands>
+		<Unit filename="../../bsp/bsp.h" />
+		<Unit filename="../../bsp/bsp_charge.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../../bsp/bsp_charge.h" />
+		<Unit filename="../../bsp/bsp_huart.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../../bsp/bsp_huart.h" />
+		<Unit filename="../../bsp/bsp_io_key.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../../bsp/bsp_io_key.h" />
+		<Unit filename="../../bsp/bsp_ir.h" />
+		<Unit filename="../../bsp/bsp_irrx.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../../bsp/bsp_irtx.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../../bsp/bsp_key.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../../bsp/bsp_key.h" />
+		<Unit filename="../../bsp/bsp_le_dut.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../../bsp/bsp_le_dut.h" />
+		<Unit filename="../../bsp/bsp_led.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../../bsp/bsp_led.h" />
+		<Unit filename="../../bsp/bsp_param.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../../bsp/bsp_param.h" />
+		<Unit filename="../../bsp/bsp_pwm.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../../bsp/bsp_pwm.h" />
+		<Unit filename="../../bsp/bsp_saradc.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../../bsp/bsp_saradc.h" />
+		<Unit filename="../../bsp/bsp_saradc_key.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../../bsp/bsp_saradc_key.h" />
+		<Unit filename="../../bsp/bsp_saradc_vbat.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../../bsp/bsp_saradc_vbat.h" />
+		<Unit filename="../../bsp/bsp_sdadc.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../../bsp/bsp_sdadc.h" />
+		<Unit filename="../../bsp/bsp_sys.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../../bsp/bsp_sys.h" />
+		<Unit filename="../../bsp/bsp_uart_debug.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../../bsp/bsp_uart_debug.h" />
+		<Unit filename="../../bsp/bsp_uart_transfer.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../../bsp/bsp_uart_transfer.h" />
+		<Unit filename="../../driver/driver_charge.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../../driver/driver_charge.h" />
+		<Unit filename="../../driver/driver_clk.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../../driver/driver_clk.h" />
+		<Unit filename="../../driver/driver_com.h" />
+		<Unit filename="../../driver/driver_gpio.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../../driver/driver_gpio.h" />
+		<Unit filename="../../driver/driver_gpio_reg.h" />
+		<Unit filename="../../driver/driver_hsuart.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../../driver/driver_hsuart.h" />
+		<Unit filename="../../driver/driver_hsuart_reg.h" />
+		<Unit filename="../../driver/driver_iic.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../../driver/driver_iic.h" />
+		<Unit filename="../../driver/driver_iic_reg.h" />
+		<Unit filename="../../driver/driver_ir.h" />
+		<Unit filename="../../driver/driver_ir_reg.h" />
+		<Unit filename="../../driver/driver_irrx.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../../driver/driver_irtx.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../../driver/driver_keyscan.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../../driver/driver_keyscan.h" />
+		<Unit filename="../../driver/driver_keyscan_reg.h" />
+		<Unit filename="../../driver/driver_ledc.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../../driver/driver_ledc.h" />
+		<Unit filename="../../driver/driver_ledc_reg.h" />
+		<Unit filename="../../driver/driver_lowpwr.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../../driver/driver_lowpwr.h" />
+		<Unit filename="../../driver/driver_pwm.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../../driver/driver_pwm.h" />
+		<Unit filename="../../driver/driver_pwm_reg.h" />
+		<Unit filename="../../driver/driver_qdec.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../../driver/driver_qdec.h" />
+		<Unit filename="../../driver/driver_qdec_reg.h" />
+		<Unit filename="../../driver/driver_rtc.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../../driver/driver_rtc.h" />
+		<Unit filename="../../driver/driver_rtc_reg.h" />
+		<Unit filename="../../driver/driver_saradc.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../../driver/driver_saradc.h" />
+		<Unit filename="../../driver/driver_saradc_reg.h" />
+		<Unit filename="../../driver/driver_sdadc.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../../driver/driver_sdadc.h" />
+		<Unit filename="../../driver/driver_sdadc_reg.h" />
+		<Unit filename="../../driver/driver_sddac.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../../driver/driver_sddac.h" />
+		<Unit filename="../../driver/driver_sddac_reg.h" />
+		<Unit filename="../../driver/driver_spi.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../../driver/driver_spi.h" />
+		<Unit filename="../../driver/driver_spi_reg.h" />
+		<Unit filename="../../driver/driver_tmr.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../../driver/driver_tmr.h" />
+		<Unit filename="../../driver/driver_tmr_reg.h" />
+		<Unit filename="../../driver/driver_touch_key.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../../driver/driver_touch_key.h" />
+		<Unit filename="../../driver/driver_touch_key_reg.h" />
+		<Unit filename="../../driver/driver_uart.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../../driver/driver_uart.h" />
+		<Unit filename="../../driver/driver_uart_reg.h" />
+		<Unit filename="../../driver/driver_wdt.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../../driver/driver_wdt.h" />
+		<Unit filename="../../driver/driver_wdt_reg.h" />
+		<Unit filename="../../functions/func.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../../functions/func.h" />
+		<Unit filename="../../functions/func_adapter.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../../functions/func_adapter.h" />
+		<Unit filename="../../functions/func_le_dut.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../../functions/func_le_dut.h" />
+		<Unit filename="../../functions/func_lowpwr.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../../functions/func_lowpwr.h" />
+		<Unit filename="../../functions/func_mic_emit.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../../functions/func_mic_emit.h" />
+		<Unit filename="../../functions/msg.h" />
+		<Unit filename="../../functions/msg_adapter.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../../functions/msg_le_dut.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../../functions/msg_mic_emit.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../../header/clib.h" />
+		<Unit filename="../../header/global.h" />
+		<Unit filename="../../header/include.h" />
+		<Unit filename="../../header/macro.h" />
+		<Unit filename="../../header/s_common.h" />
+		<Unit filename="../../header/sfr.h" />
+		<Unit filename="../../header/typedef.h" />
+		<Unit filename="../../libs/api.h" />
+		<Unit filename="../../libs/api_alg.h" />
+		<Unit filename="../../libs/ble/api_btstack.h" />
+		<Unit filename="../../libs/ble/api_wireless_mic.h" />
+		<Unit filename="../../libs/ble/btstack_define.h" />
+		<Unit filename="../../libs/cpu/api_cm.h" />
+		<Unit filename="../../libs/cpu/api_codec.h" />
+		<Unit filename="../../libs/cpu/api_flash.h" />
+		<Unit filename="../../libs/cpu/api_interrupt.h" />
+		<Unit filename="../../libs/cpu/api_key.h" />
+		<Unit filename="../../libs/cpu/api_list.h" />
+		<Unit filename="../../libs/cpu/api_msg.h" />
+		<Unit filename="../../libs/cpu/api_os.h" />
+		<Unit filename="../../libs/cpu/api_pacc.h" />
+		<Unit filename="../../libs/cpu/api_pwr.h" />
+		<Unit filename="../../libs/cpu/api_sdadc.h" />
+		<Unit filename="../../libs/cpu/api_sddac.h" />
+		<Unit filename="../../libs/cpu/api_sys.h" />
+		<Unit filename="../../libs/cpu/api_sysclk.h" />
+		<Unit filename="../../libs/cpu/api_update.h" />
+		<Unit filename="../../libs/cpu/api_usb.h" />
+		<Unit filename="../../modules/audio/dac0_out.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../../modules/audio/dac0_out.h" />
+		<Unit filename="../../modules/audio/eq_drc_dbg_in_uart.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../../modules/audio/eq_drc_dbg_in_uart.h" />
+		<Unit filename="../../modules/audio/mic_eq_drc.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../../modules/audio/mic_eq_drc.h" />
+		<Unit filename="../../modules/audio/soft_gain.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../../modules/audio/soft_gain.h" />
+		<Unit filename="../../modules/ble/profile.gatt" />
+		<Unit filename="../../modules/codec/lc3s.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../../modules/effect/effect_idx.h" />
+		<Unit filename="../../modules/effect/effect_table.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../../modules/effect/mic_effect.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../../modules/effect/mic_effect.h" />
+		<Unit filename="../../modules/modules.h" />
+		<Unit filename="../../modules/tool/toolkit.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../../modules/tool/toolkit.h" />
+		<Unit filename="../../modules/tool/toolkit_effect.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../../modules/tool/toolkit_effect.h" />
+		<Unit filename="../../modules/voice/ains4_32k.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../../modules/voice/ains4_32k.h" />
+		<Unit filename="../../modules/voice/dnr_fre.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../../modules/voice/dnr_fre.h" />
+		<Unit filename="../../modules/voice/echo.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../../modules/voice/echo.h" />
+		<Unit filename="../../modules/voice/magic.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../../modules/voice/magic.h" />
+		<Unit filename="../../modules/voice/plc_soft.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../../modules/voice/plc_soft_api.h" />
+		<Unit filename="../../modules/voice/room_reverb.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../../modules/voice/room_reverb.h" />
+		<Unit filename="../../modules/wireless/mic_proc.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../../modules/wireless/wireless.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../../modules/wireless/wireless.h" />
+		<Unit filename="../../modules/wireless/wireless_cmd.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../../modules/wireless/wireless_cmd.h" />
+		<Unit filename="../../modules/wireless/wireless_cmd_api.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../../modules/wireless/wireless_dump.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../../modules/wireless/wireless_proc.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../../modules/wireless/wireless_proc.h" />
+		<Unit filename="../../modules/wireless/wireless_pwr_ctr.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../../modules/wireless/wireless_pwr_ctr.h" />
+		<Unit filename="../../modules/wireless/wireless_sync_param.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../../modules/wireless/wireless_sync_param.h" />
+		<Unit filename="../../modules/wireless/wireless_txrx.h" />
+		<Unit filename="../../modules/wireless/wireless_txrx_comb.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../../modules/wireless/wireless_txrx_single.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../../os/os_thread.h" />
+		<Unit filename="../../os/thread_alg.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../../os/thread_dec.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="Output/bin/app.xm">
+			<Option compile="1" />
+			<Option compiler="riscv32-v3" use="1" buildCommand="$compiler $options $includes -E -P -x c -c $file -o $(TARGET_OUTPUT_DIR)appxm.o" />
+			<Option compiler="riscv32" use="1" buildCommand="$compiler $options $includes -E -P -x c -c $file -o $(TARGET_OUTPUT_DIR)appxm.o" />
+		</Unit>
+		<Unit filename="Output/bin/download.xm">
+			<Option compile="1" />
+			<Option compiler="riscv32-v3" use="1" buildCommand=" " />
+			<Option compiler="riscv32" use="1" buildCommand=" " />
+		</Unit>
+		<Unit filename="Output/bin/xcfg.xm">
+			<Option compile="1" />
+			<Option compiler="riscv32-v3" use="1" buildCommand=" " />
+			<Option compiler="riscv32" use="1" buildCommand=" " />
+		</Unit>
+		<Unit filename="config.h" />
+		<Unit filename="config_ab5700_kbox.h" />
+		<Unit filename="config_ab5706a_le_mic.h" />
+		<Unit filename="config_ab5766_le_mic.h" />
+		<Unit filename="config_define.h" />
+		<Unit filename="config_extra.h" />
+		<Unit filename="effect.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="effect.h" />
+		<Unit filename="main.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="port/port_key.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="ram.ld">
+			<Option compile="1" />
+			<Option compiler="riscv32-v3" use="1" buildCommand="$compiler $options $includes -E -P -x c -c $file -o $(TARGET_OBJECT_DIR)ram.o" />
+			<Option compiler="riscv32-v2" use="1" buildCommand="$compiler $options $includes -E -P -x c -c $file -o $(TARGET_OBJECT_DIR)ram.o" />
+			<Option compiler="riscv32" use="1" buildCommand="$compiler $options $includes -E -P -x c -c $file -o $(TARGET_OBJECT_DIR)ram.o" />
+		</Unit>
+		<Unit filename="res.h" />
+		<Unit filename="strong_ble.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="strong_symbol.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="xcfg.h" />
+		<Extensions />
+	</Project>
+</CodeBlocks_project_file>
