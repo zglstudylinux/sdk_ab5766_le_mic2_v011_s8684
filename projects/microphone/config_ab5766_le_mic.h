@@ -21,7 +21,7 @@
 #define PMU_CFG_VBAT                    PMU_CFG_VBAT_4V2        //VBAT供电类型选择
 #define WK0_10S_RESET                   0                       //WK pin 10秒复位功能
 #define SYS_PWROFF_MODE                 PWROFF_MODE2            //软关机模式选择，模式1 VDDIO掉电，模式2 VDDIO不掉电
-#define BSP_UART_DEBUG_EN               GPIO_PB9                //串口打印调试使能[Baud=1500000]
+#define BSP_UART_DEBUG_EN               GPIO_PA4                //串口打印调试使能[Baud=1500000]
 #define BSP_ADKEY_EN                    1                       //AD按键使能[Default: PB0]
 #define BSP_IOKEY_EN                    0                       //IO按鍵使能[WK0:PP]
 #define BSP_CHARGE_EN                   0                       //充电功能使能
