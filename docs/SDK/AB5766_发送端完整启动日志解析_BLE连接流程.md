@@ -320,49 +320,49 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    A[bsp_ble_init · wireless.c:223] --> B{wireless_role_is_adapter?}
-    B -- false --> C[wireless_con_device_init<br/>wireless_txrx_single.c:338]
-    C --> D[printf_connect_message<br/>wireless.c:93-104]
-    D --> D1["<TX_INTERVAL> 4"]
-    D --> D2["<CON_INTERVAL> 120"]
-    D --> D3["<WIRELESS_FEAT> 18306"]
-    D --> D4["<WIRELESS_CODEC> 4"]
-    D --> D5["<FREQ_BAND> 0"]
-    D --> D6["<RETRY> 3"]
-    D --> D7["<DISCON_AUTO_PWROFF> 0"]
-    D --> D8["<CONFIG_RSSI> 70"]
-    D --> D9["<WS_NAME> LE_MIC2"]
-    C --> E[BLUETOOTH 启动]
-    E --> F[ble_scan_set_enable 1<br/>发射端开始扫描]
-    F --> G[BLE 库扫描到接收端广播]
-    G --> H[ble_scan_rx_rep_cb<br/>wireless.c:196]
-    H --> H1["addr: 13 6d 4e 6c 42 41"]
-    H --> H2[ble_connect_req 1000]
-    H2 --> I[BLE 连接建立]
-    I --> J[library 触发 BT_NOTICE_WIRELESS_CONNECTED]
-    J --> K[wireless_emit_notice<br/>wireless_proc.c:91]
-    K --> K1["WIRELESS_CONNECTED, 0"]
-    K --> K2[sys_clk_req INDEX_DECODE, SYS_160M]
-    K2 --> K3["==>vddcore: 20->24"]
-    K --> K4[mic_emit_init<br/>mic_proc.c:597]
-    K4 --> K5[loc_mic_pacc_init<br/>mic_effect.c:82]
+    A["bsp_ble_init · wireless.c:223"] --> B{wireless_role_is_adapter?}
+    B -- false --> C["wireless_con_device_init<br/>wireless_txrx_single.c:338"]
+    C --> D["printf_connect_message<br/>wireless.c:93-104"]
+    D --> D1["TX_INTERVAL 4"]
+    D --> D2["CON_INTERVAL 120"]
+    D --> D3["WIRELESS_FEAT 18306"]
+    D --> D4["WIRELESS_CODEC 4"]
+    D --> D5["FREQ_BAND 0"]
+    D --> D6["RETRY 3"]
+    D --> D7["DISCON_AUTO_PWROFF 0"]
+    D --> D8["CONFIG_RSSI 70"]
+    D --> D9["WS_NAME LE_MIC2"]
+    C --> E["BLUETOOTH 启动"]
+    E --> F["ble_scan_set_enable 1<br/>发射端开始扫描"]
+    F --> G["BLE 库扫描到接收端广播"]
+    G --> H["ble_scan_rx_rep_cb<br/>wireless.c:196"]
+    H --> H1["addr 13 6d 4e 6c 42 41"]
+    H --> H2["ble_connect_req 1000"]
+    H2 --> I["BLE 连接建立"]
+    I --> J["library 触发 BT_NOTICE_WIRELESS_CONNECTED"]
+    J --> K["wireless_emit_notice<br/>wireless_proc.c:91"]
+    K --> K1["WIRELESS_CONNECTED 0"]
+    K --> K2["sys_clk_req INDEX_DECODE SYS_160M"]
+    K2 --> K3["vddcore 20 转 24"]
+    K --> K4["mic_emit_init<br/>mic_proc.c:597"]
+    K4 --> K5["loc_mic_pacc_init<br/>mic_effect.c:82"]
     K5 --> K5a["loc_mic_pacc_init"]
-    K4 --> K6[mic_eq_drc_init<br/>mic_eq_drc.c:28]
+    K4 --> K6["mic_eq_drc_init<br/>mic_eq_drc.c:28"]
     K6 --> K6a["mic_eq_drc_init 4"]
-    K4 --> K7[loc_mic_pacc_enable<br/>mic_effect.c:139]
+    K4 --> K7["loc_mic_pacc_enable<br/>mic_effect.c:139"]
     K7 --> K7a["loc_mic_pacc_enable"]
-    K4 --> K8[dac0_out_init<br/>dac0_out.c:91]
+    K4 --> K8["dac0_out_init<br/>dac0_out.c:91"]
     K8 --> K8a["dac0_out_init"]
-    K --> K9[lowpwr_pwroff_auto_dis<br/>func_lowpwr.c]
-    K --> K10[sys_cb.mic_alg_en = 1]
-    K --> K11[wireless_mic.connected_sta |= BIT 0]
-    K --> K12[wireless_mic.change_flag = 1]
-    classDef path fill:#cfe2ff,stroke:#0d6efd
-    classDef trace fill:#fff3cd,stroke:#ffc107
-    classDef act fill:#d1e7dd,stroke:#198754
-    class A,B,C path
-    class D,D1,D2,D3,D4,D5,D6,D7,D8,D9,trace_class,D1 trace
-    class E,F,G,H,I,J,K,F1,F2,F3,act_class act
+    K --> K9["lowpwr_pwroff_auto_dis<br/>func_lowpwr.c"]
+    K --> K10["sys_cb.mic_alg_en 置一"]
+    K --> K11["wireless_mic.connected_sta 置 BIT0"]
+    K --> K12["wireless_mic.change_flag 置一"]
+    classDef path_cls fill:#cfe2ff,stroke:#0d6efd
+    classDef trace_cls fill:#fff3cd,stroke:#ffc107
+    classDef act_cls fill:#d1e7dd,stroke:#198754
+    class A,B,C path_cls
+    class D,D1,D2,D3,D4,D5,D6,D7,D8,D9 trace_cls
+    class E,F,G,H,H1,H2,I,J,K,K1,K2,K3,K4,K5,K5a,K6,K6a,K7,K7a,K8,K8a,K9,K10,K11,K12 act_cls
 ```
 
 ---

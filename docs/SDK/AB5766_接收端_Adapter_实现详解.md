@@ -12,16 +12,16 @@
 - 接收端代码中 `adapter` / `mic_dec` / `adapter_con` 指接收端；`mic_emit` / `mic_enc` / `device_con` 指发射端。
 - 关键缩略词：
 
-| 缩略词 | 含义 |
-| --- | --- |
-| SDDAC | Sigma-Delta DAC，喇叭输出外设 |
-| PACC | 硬件加速音频处理模块（EQ/DRC/MIX） |
-| LC3S | 低复杂度通信编解码（small frame 尺寸） |
-| PLC | Packet Loss Concealment（丢包隐藏） |
-| COMB_BUF | 多个音频帧组合到一个 radio packet 内 |
-| ROLE | 角色：发射端或接收端，由 `cfg_wireless_role` 决定 |
-| LINK_NB | 接收端可同时连接的话筒数量（默认 2） |
-| UAC | USB Audio Class（PC 看到的 USB 麦克风） |
+| 缩略词   | 含义                                              |
+| -------- | ------------------------------------------------- |
+| SDDAC    | Sigma-Delta DAC，喇叭输出外设                     |
+| PACC     | 硬件加速音频处理模块（EQ/DRC/MIX）                |
+| LC3S     | 低复杂度通信编解码（small frame 尺寸）            |
+| PLC      | Packet Loss Concealment（丢包隐藏）               |
+| COMB_BUF | 多个音频帧组合到一个 radio packet 内              |
+| ROLE     | 角色：发射端或接收端，由 `cfg_wireless_role` 决定 |
+| LINK_NB  | 接收端可同时连接的话筒数量（默认 2）              |
+| UAC      | USB Audio Class（PC 看到的 USB 麦克风）           |
 
 ---
 
@@ -48,11 +48,11 @@ flowchart TD
 
 `wireless_role_is_adapter()` 等价于 `cfg_wireless_role`（见 `libs/ble/api_wireless_mic.h:52`），而 `cfg_wireless_role` 在 `modules/wireless/wireless.c:25` 定义为 `true`，**实际值由 `wireless_mic_var_init()` 设置**：
 
-| 入口 | `wireless_mic_role_init()` 见 `modules/wireless/wireless_proc.c:5-18` |
-| --- | --- |
-| `xcfg_cb.wireless_adapter_en` 为真 | `cfg_wireless_role = true` → **接收端** |
-| `xcfg_cb.wireless_mic_emit_en` 为真 | `cfg_wireless_role = false` → **发射端** |
-| 两者都关 | 默认 `false` → **发射端** |
+| 入口                                | `wireless_mic_role_init()` 见 `modules/wireless/wireless_proc.c:5-18` |
+| ----------------------------------- | ------------------------------------------------------------ |
+| `xcfg_cb.wireless_adapter_en` 为真  | `cfg_wireless_role = true` → **接收端**                      |
+| `xcfg_cb.wireless_mic_emit_en` 为真 | `cfg_wireless_role = false` → **发射端**                     |
+| 两者都关                            | 默认 `false` → **发射端**                                    |
 
 `xcfg_cb` 由 `bsp_param_init()` 从 Flash 加载（`bsp/bsp_sys.c:243`），其中 `wireless_adapter_en` / `wireless_mic_emit_en` 是产测写入的标志位，**用于同一份固件烧到不同板子上时自动切换角色**。
 
@@ -74,7 +74,7 @@ flowchart LR
     class Em,Code2,EmDef warn
 ```
 
-### 1.2 接收端功能入口
+### 1.3 接收端功能入口
 
 ```
 func_run()  [functions/func.c:148-177]
@@ -92,48 +92,48 @@ func_run()  [functions/func.c:148-177]
 
 `func_cb` 是一个全局状态机上下文（`functions/func.c:4`），`func_cb.sta` 在 `func.c` 顶层状态机里切换。
 
-### 1.3 接收端与发射端的关键差异
+### 1.4 接收端与发射端的关键差异
 
-| 维度 | 接收端 ADAPTER | 发射端 MIC_EMIT |
-| --- | --- | --- |
-| 角色 | 扫描回连的"主机" | 主动扫描/连接适配器的"从机" |
-| 用户接口 | USB 麦克风 / 喇叭 DAC | 麦克风采集 + 按键 |
-| 蓝牙角色 | Advertiser（可被发现 + 可被连接） | Scanner / Initiator |
-| 音频流 | BLE RX → 解码 → DAC/USB | SDADC → 编码 → BLE TX |
-| 关键全局 | `adapter` / `mic_dec` / `adapter_con` | `mic_emit` / `mic_enc` / `device_con` |
-| 入口函数 | `func_adapter()` (`func_adapter.c:222`) | `func_mic_emit()` (`func_mic_emit.c:212`) |
+| 维度     | 接收端 ADAPTER                               | 发射端 MIC_EMIT                                |
+| -------- | -------------------------------------------- | ---------------------------------------------- |
+| 角色     | 扫描回连的"主机"                             | 主动扫描/连接适配器的"从机"                    |
+| 用户接口 | USB 麦克风 / 喇叭 DAC                        | 麦克风采集 + 按键                              |
+| 蓝牙角色 | Advertiser（可被发现 + 可被连接）            | Scanner / Initiator                            |
+| 音频流   | BLE RX → 解码 → DAC/USB                      | SDADC → 编码 → BLE TX                          |
+| 关键全局 | `adapter` / `mic_dec` / `adapter_con`        | `mic_emit` / `mic_enc` / `device_con`          |
+| 入口函数 | `func_adapter()` (`func_adapter.c:222`)      | `func_mic_emit()` (`func_mic_emit.c:212`)      |
 | 消息入口 | `func_adapter_message()` (`msg_adapter.c:5`) | `func_mic_emit_message()` (`msg_mic_emit.c:5`) |
-| 按键表 | `adapter_key_msg_tbl` (port_key.c:61-67) | `mic_emit_key_msg_tbl` (port_key.c:43-58) |
+| 按键表   | `adapter_key_msg_tbl` (port_key.c:61-67)     | `mic_emit_key_msg_tbl` (port_key.c:43-58)      |
 
 ---
 
 ## 2. 接收端功能文件清单
 
-| 文件 | 作用 |
-| --- | --- |
-| `functions/func_adapter.c` | 接收端状态机（广播、连接、退出） |
-| `functions/func_adapter.h` | 公开 API（`func_adapter()`、`adapter_init/reset`） |
-| `functions/msg_adapter.c` | 接收端消息处理（USB 插拔、UART 命令） |
-| `modules/wireless/wireless.c` | 无线协议栈角色判定、连接管理、广播配置 |
-| `modules/wireless/wireless_proc.c` | 蓝牙事件通知与连接状态机、`wireless_mic_var_init()` |
-| `modules/wireless/wireless_txrx_single.c` | **单包**模式下的 RX 缓冲管理（默认编译路径） |
-| `modules/wireless/wireless_txrx_comb.c` | **组合包**模式下的 RX 缓冲管理（`WIRELESS_CON_COMB_BUF_EN=1` 时编译） |
-| `modules/wireless/wireless_cmd.c` | 私有命令收发环形缓冲 |
-| `modules/wireless/wireless_cmd_api.c` | 私有命令发送 API；接收端 `wireless_rx_cmd` 分发 |
-| `modules/wireless/wireless_sync_param.c` | 接收端同步参数（echo/soft_gain/magic/mic_mute） |
-| `modules/wireless/wireless_pwr_ctr.c` | 自动功率控制（接收端评估 PER，命令发射端调档） |
-| `modules/wireless/wireless_dump.c` | PER/RSSI 调试打印 |
-| `modules/wireless/mic_proc.c` | **接收端解码**（含 MIX_DRC） + 接收端 ADC 关闭 |
-| `modules/audio/dac0_out.c` | DAC0 输出（接收端扬声器） |
-| `modules/audio/mic_eq_drc.c` | 硬件 EQ/DRC/MIX 算法封装（接收端用 mix_drc） |
-| `modules/codec/lc3s.c` | LC3S 编码/解码（即时配置） |
-| `modules/voice/plc_soft.c` | PLC 丢包隐藏（适配器双通道） |
-| `bsp/bsp_sddac.c` | SDDAC 初始化与播放驱动 |
-| `bsp/bsp_usb.c` | USB Device 框架（UAC MIC） |
-| `bsp/bsp_key.c` | ADC/IO 按键事件去抖 |
-| `bsp/bsp_led.c` | LED 状态指示 |
-| `bsp/bsp_param.c` | Flash 参数读写 |
-| `projects/microphone/config_ab5766_le_mic.h` | **当前默认配置**（所有功能开关） |
+| 文件                                         | 作用                                                         |
+| -------------------------------------------- | ------------------------------------------------------------ |
+| `functions/func_adapter.c`                   | 接收端状态机（广播、连接、退出）                             |
+| `functions/func_adapter.h`                   | 公开 API（`func_adapter()`、`adapter_init/reset`）           |
+| `functions/msg_adapter.c`                    | 接收端消息处理（USB 插拔、UART 命令）                        |
+| `modules/wireless/wireless.c`                | 无线协议栈角色判定、连接管理、广播配置                       |
+| `modules/wireless/wireless_proc.c`           | 蓝牙事件通知与连接状态机、`wireless_mic_var_init()`          |
+| `modules/wireless/wireless_txrx_single.c`    | **单包**模式下的 RX 缓冲管理（默认编译路径）                 |
+| `modules/wireless/wireless_txrx_comb.c`      | **组合包**模式下的 RX 缓冲管理（`WIRELESS_CON_COMB_BUF_EN=1` 时编译） |
+| `modules/wireless/wireless_cmd.c`            | 私有命令收发环形缓冲                                         |
+| `modules/wireless/wireless_cmd_api.c`        | 私有命令发送 API；接收端 `wireless_rx_cmd` 分发              |
+| `modules/wireless/wireless_sync_param.c`     | 接收端同步参数（echo/soft_gain/magic/mic_mute）              |
+| `modules/wireless/wireless_pwr_ctr.c`        | 自动功率控制（接收端评估 PER，命令发射端调档）               |
+| `modules/wireless/wireless_dump.c`           | PER/RSSI 调试打印                                            |
+| `modules/wireless/mic_proc.c`                | **接收端解码**（含 MIX_DRC） + 接收端 ADC 关闭               |
+| `modules/audio/dac0_out.c`                   | DAC0 输出（接收端扬声器）                                    |
+| `modules/audio/mic_eq_drc.c`                 | 硬件 EQ/DRC/MIX 算法封装（接收端用 mix_drc）                 |
+| `modules/codec/lc3s.c`                       | LC3S 编码/解码（即时配置）                                   |
+| `modules/voice/plc_soft.c`                   | PLC 丢包隐藏（适配器双通道）                                 |
+| `bsp/bsp_sddac.c`                            | SDDAC 初始化与播放驱动                                       |
+| `bsp/bsp_usb.c`                              | USB Device 框架（UAC MIC）                                   |
+| `bsp/bsp_key.c`                              | ADC/IO 按键事件去抖                                          |
+| `bsp/bsp_led.c`                              | LED 状态指示                                                 |
+| `bsp/bsp_param.c`                            | Flash 参数读写                                               |
+| `projects/microphone/config_ab5766_le_mic.h` | **当前默认配置**（所有功能开关）                             |
 
 ---
 
@@ -164,20 +164,20 @@ func_run()  [functions/func.c:148-177]
 
 `bsp/bsp_sys.c:200-267`：
 
-| 调用 | 行号 | 作用 |
-| --- | --- | --- |
-| `xcfg_init(&xcfg_cb, sizeof(xcfg_cb))` | 202 | 加载 Flash 产测参数，覆盖 `xcfg_cb` 全局 |
-| `sys_get_rand_key_init(rand_seed)` | 207 | 用 `xcfg_cb.le_addr[2..5]` 初始化 BLE 随机种子 |
-| `bsp_var_init()` | 209 | 初始化 `sys_cb.pwroff`、`msg_queue` 等运行时 |
-| `wireless_mic_var_init()` | 211 | **关键**：调用 `wireless_mic_role_init()` + `wireless_mic_load_code()` + `wireless_cmd_init()` |
-| `pmu_init(cfg_pmu_get())` | 213 | 配置 PMU BUCK/LDO |
-| `bsp_saradc_init()` / `bsp_key_init()` | 216, 220 | ADC 与按键初始化 |
-| `led_init()` | 224 | LED 初始化 |
-| `power_on_check()` | 238 | 按住 PWR 才开机的逻辑 |
-| `sys_clk_set(SYS_CLK_SEL)` | 241 | 切主频（默认 24M） |
-| `bsp_param_init()` | 243 | 加载音量、绑定等参数 |
-| `xosc_init()` | 245 | 晶振校准 |
-| `sys_set_tmr_enable(1, 1)` | 248 | 启动 5ms / 1ms 定时器 |
+| 调用                                   | 行号     | 作用                                                         |
+| -------------------------------------- | -------- | ------------------------------------------------------------ |
+| `xcfg_init(&xcfg_cb, sizeof(xcfg_cb))` | 202      | 加载 Flash 产测参数，覆盖 `xcfg_cb` 全局                     |
+| `sys_get_rand_key_init(rand_seed)`     | 207      | 用 `xcfg_cb.le_addr[2..5]` 初始化 BLE 随机种子               |
+| `bsp_var_init()`                       | 209      | 初始化 `sys_cb.pwroff`、`msg_queue` 等运行时                 |
+| `wireless_mic_var_init()`              | 211      | **关键**：调用 `wireless_mic_role_init()` + `wireless_mic_load_code()` + `wireless_cmd_init()` |
+| `pmu_init(cfg_pmu_get())`              | 213      | 配置 PMU BUCK/LDO                                            |
+| `bsp_saradc_init()` / `bsp_key_init()` | 216, 220 | ADC 与按键初始化                                             |
+| `led_init()`                           | 224      | LED 初始化                                                   |
+| `power_on_check()`                     | 238      | 按住 PWR 才开机的逻辑                                        |
+| `sys_clk_set(SYS_CLK_SEL)`             | 241      | 切主频（默认 24M）                                           |
+| `bsp_param_init()`                     | 243      | 加载音量、绑定等参数                                         |
+| `xosc_init()`                          | 245      | 晶振校准                                                     |
+| `sys_set_tmr_enable(1, 1)`             | 248      | 启动 5ms / 1ms 定时器                                        |
 
 `wireless_mic_var_init()` 定义于 `modules/wireless/wireless_proc.c:342-348`：
 
@@ -238,16 +238,16 @@ void func_run(void) {
 
 `functions/func_adapter.c:36-239` 提供了 7 个函数：
 
-| 行号 | 函数 | 作用 |
-| --- | --- | --- |
-| 36-53 | `usb_detect()` | USB 设备插拔检测（`ADAPTER_USB_MIC_RX_EN`） |
-| 57-69 | `func_adapter_init()` | 初始化 adapter 状态字段：`init_state = ADAPTER_STA_INIT_IDLE`，LED 设为"待连接" |
-| 71-121 | `func_adapter_process_do()` | **核心状态机**：处理 adv 切换、连接/断开反馈 |
-| 123-162 | `ble_set_con_id()` / `wireless_con_role()` | 主副麦切换（仅 `WIRELESS_CON_PAIR_MODE`） |
-| 165-202 | `func_adapter_process()` | 每次循环调用：状态机 + 无线协议栈 + 公共 process |
-| 204-213 | `func_adapter_enter()` | 进态：清消息队列、初始化、调用 `bsp_ble_init()` |
-| 215-220 | `func_adapter_exit()` | 退态：关蓝牙 |
-| 222-239 | `func_adapter()` | 顶层循环（_enter → process ↔ message → _exit） |
+| 行号    | 函数                                       | 作用                                                         |
+| ------- | ------------------------------------------ | ------------------------------------------------------------ |
+| 36-53   | `usb_detect()`                             | USB 设备插拔检测（`ADAPTER_USB_MIC_RX_EN`）                  |
+| 57-69   | `func_adapter_init()`                      | 初始化 adapter 状态字段：`init_state = ADAPTER_STA_INIT_IDLE`，LED 设为"待连接" |
+| 71-121  | `func_adapter_process_do()`                | **核心状态机**：处理 adv 切换、连接/断开反馈                 |
+| 123-162 | `ble_set_con_id()` / `wireless_con_role()` | 主副麦切换（仅 `WIRELESS_CON_PAIR_MODE`）                    |
+| 165-202 | `func_adapter_process()`                   | 每次循环调用：状态机 + 无线协议栈 + 公共 process             |
+| 204-213 | `func_adapter_enter()`                     | 进态：清消息队列、初始化、调用 `bsp_ble_init()`              |
+| 215-220 | `func_adapter_exit()`                      | 退态：关蓝牙                                                 |
+| 222-239 | `func_adapter()`                           | 顶层循环（_enter → process ↔ message → _exit）               |
 
 ### 4.2 状态机详解
 
@@ -278,15 +278,15 @@ stateDiagram-v2
 
 #### 4.2.1 关键转移点（带行号）
 
-| 事件 | 行号 | 行为 |
-| --- | --- | --- |
-| `wireless_mic.change_flag = 1` | `func_adapter.c:76-79` | 清 change_flag + 进入 `START_ACTION` |
-| `INIT_IDLE` 有回连信息 | `func_adapter.c:87-89` | `ble_adv_set_enable(1, 0)` → `INIT_W4_CONNECT`（可连接，不可发现） |
-| `INIT_IDLE` 无回连信息 | `func_adapter.c:91-95` | `ble_adv_set_enable(1, 1)` → `IDLE`（可连接 + 可发现） |
-| `INIT_W4_CONNECT` 2 秒超时 | `func_adapter.c:99-101` | → `START_ACTION` |
-| `START_ACTION` 全连接 | `func_adapter.c:108-110` | `ble_adv_set_enable(0, 0)`：关闭广播 |
-| `START_ACTION` 绑定 + 配对饱和 | `func_adapter.c:111-113` | `ble_adv_set_enable(1, 0)`：等待被连 |
-| `START_ACTION` 其余情况 | `func_adapter.c:114-116` | `ble_adv_set_enable(1, 1)`：可发现 + 可被连 |
+| 事件                           | 行号                     | 行为                                                         |
+| ------------------------------ | ------------------------ | ------------------------------------------------------------ |
+| `wireless_mic.change_flag = 1` | `func_adapter.c:76-79`   | 清 change_flag + 进入 `START_ACTION`                         |
+| `INIT_IDLE` 有回连信息         | `func_adapter.c:87-89`   | `ble_adv_set_enable(1, 0)` → `INIT_W4_CONNECT`（可连接，不可发现） |
+| `INIT_IDLE` 无回连信息         | `func_adapter.c:91-95`   | `ble_adv_set_enable(1, 1)` → `IDLE`（可连接 + 可发现）       |
+| `INIT_W4_CONNECT` 2 秒超时     | `func_adapter.c:99-101`  | → `START_ACTION`                                             |
+| `START_ACTION` 全连接          | `func_adapter.c:108-110` | `ble_adv_set_enable(0, 0)`：关闭广播                         |
+| `START_ACTION` 绑定 + 配对饱和 | `func_adapter.c:111-113` | `ble_adv_set_enable(1, 0)`：等待被连                         |
+| `START_ACTION` 其余情况        | `func_adapter.c:114-116` | `ble_adv_set_enable(1, 1)`：可发现 + 可被连                  |
 
 #### 4.2.2 状态机调度
 
@@ -348,13 +348,13 @@ func_cb.last = FUNC_ADAPTER;
 
 `functions/msg_adapter.c:5-50` 是 `func_adapter()` 循环里处理消息的入口。**接收端只关心 USB 插拔和 UART 命令**：
 
-| 消息 | 行号 | 动作 | 关键调用 |
-| --- | --- | --- | --- |
-| `EVT_PC_INSERT` | 18-22 | PC 插入 USB | `usb_device_enter(UDE_ENUM_TYPE)` → `adapter_usb_init_flag = 1` |
-| `EVT_PC_REMOVE` | 24-28 | PC 拔出 USB | `usb_device_exit()` → `adapter_usb_init_flag = 0` |
-| `EVT_UART_COMMAND_PROC` | 36-38 | UART 命令 | `uart_command_rx_proc()`（`ADAPTER_UART_COMMAND_EN`） |
-| `MSG_SYS_1S` | 41-45 | 1 秒调试 | `wireless_mic_dump()`（`WIRELESS_MIC_DUMP_PER_BER`） |
-| default | 46-48 | 通用消息 | `func_message(msg)` |
+| 消息                    | 行号  | 动作        | 关键调用                                                     |
+| ----------------------- | ----- | ----------- | ------------------------------------------------------------ |
+| `EVT_PC_INSERT`         | 18-22 | PC 插入 USB | `usb_device_enter(UDE_ENUM_TYPE)` → `adapter_usb_init_flag = 1` |
+| `EVT_PC_REMOVE`         | 24-28 | PC 拔出 USB | `usb_device_exit()` → `adapter_usb_init_flag = 0`            |
+| `EVT_UART_COMMAND_PROC` | 36-38 | UART 命令   | `uart_command_rx_proc()`（`ADAPTER_UART_COMMAND_EN`）        |
+| `MSG_SYS_1S`            | 41-45 | 1 秒调试    | `wireless_mic_dump()`（`WIRELESS_MIC_DUMP_PER_BER`）         |
+| default                 | 46-48 | 通用消息    | `func_message(msg)`                                          |
 
 **消息源**：
 
@@ -426,15 +426,22 @@ flowchart LR
     class dac0_out,usb_mic,sddac,uac out
 ```
 
-声波数据流（kick_dec_prio_trans 跨线程切换）：
-- BLE 驱动 ISR → `wireless_d2a_set_rxpkt_cb` → `wireless_d2a_set_rxdec_cb` → `kick_dec_prio_trans(idx)` → 工作线程 `mic_dec_prco_cb(idx)`
+| 缩写    | 全称                               | 中文译名             | 核心作用                     |
+| :------ | :--------------------------------- | :------------------- | :--------------------------- |
+| **BFI** | Bad Frame Indicator                | 坏帧指示器           | 标记数据包是否有效           |
+| **LC3** | Low Complexity Communication Codec | 低复杂度通信编解码器 | 蓝牙 LE Audio 标准音频编解码 |
+| **PLC** | Packet Loss Concealment            | 丢包隐藏/补偿        | 修复丢包造成的音频中断       |
+| **DRC** | Dynamic Range Compression          | 动态范围压缩         | 自动调节音量，使听感更平稳   |
+
+### 6.2 声波数据流（kick_dec_prio_trans 跨线程切换）
+
+```
+BLE 驱动 ISR` → `wireless_d2a_set_rxpkt_cb` → `wireless_d2a_set_rxdec_cb` → `kick_dec_prio_trans(idx)` → 工作线程 `mic_dec_prco_cb(idx)
 ```
 
-![audio pipeline](https://via.placeholder.com/600x120?text=BLE+RX+-+decoder+-+DAC/USB)
+### 6.3 关键代码节点
 
-### 6.2 关键代码节点
-
-#### 6.2.1 接收端初始化
+#### 6.3.1 接收端初始化
 
 `adapter_init()`（`modules/wireless/mic_proc.c:700-734`）按配置开关依次初始化：
 
@@ -461,7 +468,7 @@ wireless_host_ch_class_set();                                // 732 -> 设置频
 
 > ⚠️ 注意：`adapter_init` 完全在 `wireless_emit_notice(BT_NOTICE_WIRELESS_CONNECTED)` 第一次连接成功时调用（`wireless_proc.c:104-105`），**不是**在 `func_adapter_enter()` 里——后者只跑 `bsp_ble_init()` 初始化 RX 缓冲。这里区别于发射端，发射端 `mic_emit_init` 也是在连接成功时调用，以节约功耗。
 
-#### 6.2.2 接收端清理
+#### 6.3.2 接收端清理
 
 `adapter_reset()`（`modules/wireless/mic_proc.c:736-750`）：
 
@@ -480,7 +487,7 @@ if(con_sta == 0) {                 // 全断
 
 在 `wireless_emit_notice(BT_NOTICE_WIRELESS_DISCONNECT)` 时调用（`wireless_proc.c:181`）。
 
-#### 6.2.3 接收处理回调（**核心解码链路**）
+#### 6.3.3 接收处理回调（**核心解码链路**）
 
 `mic_dec_prco_cb()`（`modules/wireless/mic_proc.c:550-594`）：
 
@@ -514,7 +521,7 @@ void mic_dec_prco_cb(u8 idx) {
 }
 ```
 
-#### 6.2.4 解码输出双链路处理
+#### 6.3.4 解码输出双链路处理
 
 `mic_dec_pcm_out()`（`mic_proc.c:504-546`，单包模式）：
 
@@ -551,7 +558,7 @@ void mic_dec_pcm_out(u8 idx) {
 
 COMB_BUF 模式（`mic_proc.c:393-425`）：两条链路拼成完整双声道，然后整体送 `mix_drc_audio_input` / `callback`。
 
-#### 6.2.5 帧写入 RX 缓冲（链路 → 应用）
+#### 6.3.5 帧写入 RX 缓冲（链路 → 应用）
 
 `wireless_d2a_get_rx_frame()`（`modules/wireless/wireless_txrx_single.c:265-270`）：
 
@@ -563,16 +570,16 @@ u8 wireless_d2a_get_rx_frame(u8 idx, u8 *buf, uint size) {
 
 组合包版本：`wireless_txrx_comb.c:120-136` 的 `wireless_d2a_get_rx_frame()`。
 
-#### 6.2.6 调度回调
+#### 6.3.6 调度回调
 
-| 回调 | 定义 | 作用 |
-| --- | --- | --- |
-| `wireless_d2a_adc_dma_cb` | `wireless_txrx_single.c:293-297` | TX 启动 ADC（接收端**不调用**） |
-| `wireless_d2a_set_rxpkt_cb` | `wireless_txrx_single.c:256-262` | 收到一包 RX 数据 |
-| `wireless_d2a_set_rxdec_cb` | `wireless_txrx_single.c:273-281` | 收完一包，触发解码 |
-| `wireless_d2a_dac_dma_cb` | `wireless_txrx_single.c:284-288` | 解码完成 → 启动 DAC DMA |
-| `wireless_d2a_dac_fifo_cb` | `wireless_txrx_single.c:243-248` | DAC 取 FIFO 计数 |
-| `wireless_d2a_end_ind_cb` | `wireless_txrx_single.c:314-326` | 链路断开 |
+| 回调                        | 定义                             | 作用                            |
+| --------------------------- | -------------------------------- | ------------------------------- |
+| `wireless_d2a_adc_dma_cb`   | `wireless_txrx_single.c:293-297` | TX 启动 ADC（接收端**不调用**） |
+| `wireless_d2a_set_rxpkt_cb` | `wireless_txrx_single.c:256-262` | 收到一包 RX 数据                |
+| `wireless_d2a_set_rxdec_cb` | `wireless_txrx_single.c:273-281` | 收完一包，触发解码              |
+| `wireless_d2a_dac_dma_cb`   | `wireless_txrx_single.c:284-288` | 解码完成 → 启动 DAC DMA         |
+| `wireless_d2a_dac_fifo_cb`  | `wireless_txrx_single.c:243-248` | DAC 取 FIFO 计数                |
+| `wireless_d2a_end_ind_cb`   | `wireless_txrx_single.c:314-326` | 链路断开                        |
 
 `wireless_d2a_set_rxdec_cb()` 关键：
 
@@ -587,7 +594,7 @@ void wireless_d2a_set_rxdec_cb(u8 idx, bool rxdone) {
 
 `kick_dec_prio_trans(idx)` 触发 `mic_dec_prco_cb(idx)` 在线程上下文执行。
 
-#### 6.2.7 DAC 调速
+#### 6.3.7 DAC 调速
 
 `mic_dec_dac_sync_proc()`（`mic_proc.c:64-80`）：
 
@@ -608,7 +615,7 @@ static void mic_dec_dac_sync_proc(void) {
 
 调用时机：`mic_dec_prco_cb()` 末尾当 `idx == mic_dec.sync_idx` 时（`mic_proc.c:588-591`）。
 
-#### 6.2.8 编码器选择
+#### 6.3.8 编码器选择
 
 `WIRELESS_CON_CODEC_SEL`（`projects/microphone/config_ab5766_le_mic.h:64`）当前默认 `CODEC_LC3S`。
 
@@ -622,16 +629,16 @@ LC3S 帧大小：见 `WIRELESS_MIC_FRAME_SIZE`（`config_ab5766_le_mic.h:80`，�
 
 `modules/wireless/wireless.c:11-32` 定义了 BLE 行为的所有数值：
 
-| 名称 | 值 | 含义 |
-| --- | --- | --- |
-| `cfg_wireless_con_interval` | `WIRELESS_CON_INTERVAL * LINK_NB`（`config_ab5766_le_mic.h` 默认 2×2=4，单位 1.25ms = 5ms） | 连接间隔 |
-| `cfg_wireless_tx_interval` | `WIRELESS_MIC_TX_INTERVAL`（默认 4，单位 1.25ms = 5ms） | 音频发送周期 |
-| `cfg_wireless_tx_retry` | `WIRELESS_MIC_RETRY_NB`（默认 3） | 单包重传次数 |
-| `cfg_wireless_d2a_tx_size` | `MIC_TX_BUFFER_SIZE` | 发射 buffer 大小 |
-| `cfg_wireless_d2a_enc_us` | 编码 + 所有算法延迟（`wireless.c:19-20`） | 接收端等待补偿 |
-| `cfg_wireless_d2a_dec_us` | 解码 + MIX_DRC 延迟（`wireless.c:22`） | 解码侧的预估耗时 |
-| `cfg_wireless_feat` | 版本+d2a+hop+bonding+link_nb 位 | 协议特性字 |
-| `cfg_wireless_codec[0]` | `CODEC_LC3S | CODEC_MONO` | 编码及单声道 |
+| 名称                        | 值                                                           | 含义             |
+| --------------------------- | ------------------------------------------------------------ | ---------------- |
+| `cfg_wireless_con_interval` | `WIRELESS_CON_INTERVAL * LINK_NB`（`config_ab5766_le_mic.h` 默认 2×2=4，单位 1.25ms = 5ms） | 连接间隔         |
+| `cfg_wireless_tx_interval`  | `WIRELESS_MIC_TX_INTERVAL`（默认 4，单位 1.25ms = 5ms）      | 音频发送周期     |
+| `cfg_wireless_tx_retry`     | `WIRELESS_MIC_RETRY_NB`（默认 3）                            | 单包重传次数     |
+| `cfg_wireless_d2a_tx_size`  | `MIC_TX_BUFFER_SIZE`                                         | 发射 buffer 大小 |
+| `cfg_wireless_d2a_enc_us`   | 编码 + 所有算法延迟（`wireless.c:19-20`）                    | 接收端等待补偿   |
+| `cfg_wireless_d2a_dec_us`   | 解码 + MIX_DRC 延迟（`wireless.c:22`）                       | 解码侧的预估耗时 |
+| `cfg_wireless_feat`         | 版本+d2a+hop+bonding+link_nb 位                              | 协议特性字       |
+| `cfg_wireless_codec[0]`     | `CODEC_LC3S | CODEC_MONO`                                    | 编码及单声道     |
 
 ### 7.2 关键回调路径
 
@@ -658,12 +665,12 @@ wireless_mic.change_flag 由 func_adapter_process_do() 读取
 ble_adv_set_enable(pscan, iscan);  // pscan=可被连接, iscan=可被发现
 ```
 
-| 状态 | pscan | iscan | 行为 |
-| --- | --- | --- | --- |
-| 无绑定回连信息 | 1 | 1 | 可被发现 + 可被连 |
-| 有绑定回连信息 | 1 | 0 | 只可被连（不回连发射端，由发射端主动连） |
-| 全连 + 绑定 | 0 | 0 | 关闭广播 |
-| 全连 + 绑定饱和 | 1 | 0 | 等待下一个发射端连接 |
+| 状态            | pscan | iscan | 行为                                     |
+| --------------- | ----- | ----- | ---------------------------------------- |
+| 无绑定回连信息  | 1     | 1     | 可被发现 + 可被连                        |
+| 有绑定回连信息  | 1     | 0     | 只可被连（不回连发射端，由发射端主动连） |
+| 全连 + 绑定     | 0     | 0     | 关闭广播                                 |
+| 全连 + 绑定饱和 | 1     | 0     | 等待下一个发射端连接                     |
 
 ### 7.4 一拖二：双麦连接
 
@@ -708,19 +715,19 @@ ble_con_user_cmd_rx_cb(index, pdu)        [wireless_cmd.c:115-118]
 
 `modules/wireless/wireless_cmd_api.c`：
 
-| 行号 | 函数 | 方向 | 作用 |
-| --- | --- | --- | --- |
-| 8-18 | `wireless_tx_usb_cmd` | TX | 发送 USB 子命令 |
-| 20-30 | `wireless_tx_user_cmd` | TX | 私有 USER_DATA 发送 |
-| 32-41 | `wireless_tx_ws_mic_cmd` | TX | 发送 WS MIC 命令（mute/等级变化） |
-| 43-52 | `wireless_tx_audio_ctr_cmd` | TX | 音频控制（调试） |
-| 54-63 | `wireless_tx_user_link_cmd` | TX | WS MIC 链路命令 |
-| 65-72 | `wireless_tx_bonding_sync` | TX | 发送 BONDING 地址 |
-| 74-83 | `wireless_tx_pwr_ctr_cmd` | TX | 发送功率控制命令 |
-| 143-204 | `wireless_ws_mic_cmd` | RX | 处理 WS MIC 命令（仅 `DISCONNECT_NUM` 有效） |
-| 207-249 | `wireless_rx_usb_cmd` | RX | 处理 USB 子命令（`ADAPTER_USB_SPK_TX_EN` 或 `ADAPTER_USB_MIC_RX_EN`） |
-| 256-283 | `wireless_rx_cmd` | RX | 统一分发 |
-| 285-292 | `wireless_cmd_init` | 公共 | 初始化命令缓冲 |
+| 行号    | 函数                        | 方向 | 作用                                                         |
+| ------- | --------------------------- | ---- | ------------------------------------------------------------ |
+| 8-18    | `wireless_tx_usb_cmd`       | TX   | 发送 USB 子命令                                              |
+| 20-30   | `wireless_tx_user_cmd`      | TX   | 私有 USER_DATA 发送                                          |
+| 32-41   | `wireless_tx_ws_mic_cmd`    | TX   | 发送 WS MIC 命令（mute/等级变化）                            |
+| 43-52   | `wireless_tx_audio_ctr_cmd` | TX   | 音频控制（调试）                                             |
+| 54-63   | `wireless_tx_user_link_cmd` | TX   | WS MIC 链路命令                                              |
+| 65-72   | `wireless_tx_bonding_sync`  | TX   | 发送 BONDING 地址                                            |
+| 74-83   | `wireless_tx_pwr_ctr_cmd`   | TX   | 发送功率控制命令                                             |
+| 143-204 | `wireless_ws_mic_cmd`       | RX   | 处理 WS MIC 命令（仅 `DISCONNECT_NUM` 有效）                 |
+| 207-249 | `wireless_rx_usb_cmd`       | RX   | 处理 USB 子命令（`ADAPTER_USB_SPK_TX_EN` 或 `ADAPTER_USB_MIC_RX_EN`） |
+| 256-283 | `wireless_rx_cmd`           | RX   | 统一分发                                                     |
+| 285-292 | `wireless_cmd_init`         | 公共 | 初始化命令缓冲                                               |
 
 **接收端 `wireless_ws_mic_cmd` 当前仅一个有效分支**（`wireless_cmd_api.c:197-199`）：
 
@@ -736,22 +743,22 @@ case DISCONNECT_NUM:
 
 `modules/wireless/wireless_sync_param.c`：
 
-| 行号 | 函数 | 方向 | 作用 |
-| --- | --- | --- | --- |
-| 10-20 | `wireless_tx_echo_delay_level` | TX | 发送 echo 等级 |
-| 23-33 | `wireless_tx_soft_gain_level` | TX | 发送 soft_gain 等级 |
-| 36-45 | `wireless_tx_magic_effect_level` | TX | 发送 magic 等级 |
-| 48-57 | `wireless_tx_mic_mute_level` | TX | 发送 mic_mute |
-| 61-71 | `wireless_tx_mutual_hair_act` | TX | 双链同步动作 |
-| 74-83 | `wireless_tx_voice_rm_en` | TX | 发送 voice_rm |
-| 86-125 | `wireless_rx_mic_emit_private_sync_cmd` | RX (TX 端) | 接收 TX 同步命令（**当前被注释**） |
-| 131-143 | `wireless_sync_echo_delay_level` | RX (adapter) | 广播 echo 等级给两个 mic |
-| 145-157 | `wireless_sync_soft_gain_level` | RX (adapter) | 广播 soft_gain |
-| 159-170 | `wireless_sync_mic_magic_effect_level` | RX (adapter) | 广播 magic |
-| 172-183 | `wireless_sync_mic_mute_level` | RX (adapter) | 广播 mic_mute |
-| 185-199 | `wireless_sync_all_param` | RX (adapter) | 连接建立后广播全参数 |
-| 202-278 | `wireless_rx_adapter_private_sync_cmd` | RX (adapter) | 接收 mic 同步命令 |
-| 280-296 | `wireless_sync_param_init` | RX (adapter) | 初始化同步参数 |
+| 行号    | 函数                                    | 方向         | 作用                               |
+| ------- | --------------------------------------- | ------------ | ---------------------------------- |
+| 10-20   | `wireless_tx_echo_delay_level`          | TX           | 发送 echo 等级                     |
+| 23-33   | `wireless_tx_soft_gain_level`           | TX           | 发送 soft_gain 等级                |
+| 36-45   | `wireless_tx_magic_effect_level`        | TX           | 发送 magic 等级                    |
+| 48-57   | `wireless_tx_mic_mute_level`            | TX           | 发送 mic_mute                      |
+| 61-71   | `wireless_tx_mutual_hair_act`           | TX           | 双链同步动作                       |
+| 74-83   | `wireless_tx_voice_rm_en`               | TX           | 发送 voice_rm                      |
+| 86-125  | `wireless_rx_mic_emit_private_sync_cmd` | RX (TX 端)   | 接收 TX 同步命令（**当前被注释**） |
+| 131-143 | `wireless_sync_echo_delay_level`        | RX (adapter) | 广播 echo 等级给两个 mic           |
+| 145-157 | `wireless_sync_soft_gain_level`         | RX (adapter) | 广播 soft_gain                     |
+| 159-170 | `wireless_sync_mic_magic_effect_level`  | RX (adapter) | 广播 magic                         |
+| 172-183 | `wireless_sync_mic_mute_level`          | RX (adapter) | 广播 mic_mute                      |
+| 185-199 | `wireless_sync_all_param`               | RX (adapter) | 连接建立后广播全参数               |
+| 202-278 | `wireless_rx_adapter_private_sync_cmd`  | RX (adapter) | 接收 mic 同步命令                  |
+| 280-296 | `wireless_sync_param_init`              | RX (adapter) | 初始化同步参数                     |
 
 #### 8.3.1 接收端同步路径
 
@@ -839,18 +846,18 @@ static struct cmd_tag txcmd[WIRELESS_CON_LINK_NB];   // 每链路一个
 
 接收端默认配置启用以下模块（`config_ab5766_le_mic.h:120-133`）：
 
-| 宏 | 默认 | 含义 | 关键调用 |
-| --- | --- | --- | --- |
-| `ADAPTER_DAC_OUTPUT_EN` | 1 | DAC 喇叭输出 | `dac0_out_init()` `dac0_out_audio_input()` |
-| `ADAPTER_USB_SPK_TX_EN` | 0 | USB 喇叭输出（下行音频） | — |
-| `ADAPTER_USB_MIC_RX_EN` | 1 | USB 麦克风 UAC | `usb_device_enter/exit` `usb_mic_in_audio_input()` |
-| `ADAPTER_MIX_DRC_EN` | 1 | 一拖二混音 DRC | `mix_drc_init()` `mix_drc_audio_input()` |
-| `ADAPTER_SYNC_PARAM_EN` | 0 | 接收端控制两个 mic 的参数 | — |
-| `ADAPTER_FREQ_SHIFT_EN` | 0 | 防啸叫移频 | — |
-| `ADAPTER_HUART_AUDIO_OUTPUT_EN` | 0 | Huart 音频输出 | — |
-| `ADAPTER_UART_COMMAND_EN` | 0 | 与 560x UART 命令 | `uart_command_*` |
-| `ADAPTER_SYNC_PARAM_MEMORY_EN` | 0 | 同步参数持久化 | — |
-| `ADAPTER_DNR_FRE_EN` | 0 | DNR FRE 降噪（调试） | — |
+| 宏                              | 默认 | 含义                      | 关键调用                                           |
+| ------------------------------- | ---- | ------------------------- | -------------------------------------------------- |
+| `ADAPTER_DAC_OUTPUT_EN`         | 1    | DAC 喇叭输出              | `dac0_out_init()` `dac0_out_audio_input()`         |
+| `ADAPTER_USB_SPK_TX_EN`         | 0    | USB 喇叭输出（下行音频）  | —                                                  |
+| `ADAPTER_USB_MIC_RX_EN`         | 1    | USB 麦克风 UAC            | `usb_device_enter/exit` `usb_mic_in_audio_input()` |
+| `ADAPTER_MIX_DRC_EN`            | 1    | 一拖二混音 DRC            | `mix_drc_init()` `mix_drc_audio_input()`           |
+| `ADAPTER_SYNC_PARAM_EN`         | 0    | 接收端控制两个 mic 的参数 | —                                                  |
+| `ADAPTER_FREQ_SHIFT_EN`         | 0    | 防啸叫移频                | —                                                  |
+| `ADAPTER_HUART_AUDIO_OUTPUT_EN` | 0    | Huart 音频输出            | —                                                  |
+| `ADAPTER_UART_COMMAND_EN`       | 0    | 与 560x UART 命令         | `uart_command_*`                                   |
+| `ADAPTER_SYNC_PARAM_MEMORY_EN`  | 0    | 同步参数持久化            | —                                                  |
+| `ADAPTER_DNR_FRE_EN`            | 0    | DNR FRE 降噪（调试）      | —                                                  |
 
 ### 10.1 接收端算法数据流
 
@@ -940,22 +947,22 @@ uint8_t cfg_lc3s_bitrate = 80000;                          // 25字节/帧对应
 
 ## 11. 关键全局变量与数据结构
 
-| 名称 | 文件:行 | 作用 |
-| --- | --- | --- |
-| `func_cb` | `functions/func.c:4` | 顶层状态机上下文（`func_cb.sta` 控制当前功能） |
-| `sys_cb` | `bsp/bsp_sys.c:8` | 系统状态（`pwroff`、`mic_alg_en`、`disp_sta` 等） |
-| `xcfg_cb` | `bsp/bsp_sys.c:7` | 产测配置（`wireless_adapter_en`、`le_name`、`osc_*` 等） |
-| `wireless_mic` | `modules/wireless/wireless.c:37` | 连接状态、变化标志 |
-| `mic_dec` | `modules/wireless/mic_proc.c:50` | 接收端解码状态（`pcm[LINK_NB]`、`sync_idx`） |
-| `mic_enc` | `modules/wireless/mic_proc.c:47` | 发射端编码状态（接收端**不直接用**） |
-| `adapter_con` | `modules/wireless/wireless_txrx_single.c:60-63` | RX 缓冲 + 状态 |
-| `device_con` | `modules/wireless/wireless_txrx_single.c:53-56` | TX 缓冲（接收端**不直接用**） |
-| `adapter` | `functions/func_adapter.c:27-31` | 接收端状态机本地变量 |
-| `adapter_usb_init_flag` | `functions/func_adapter.c:34` | USB 设备启用标志 |
-| `txcmd[]` | `modules/wireless/wireless_cmd.c:14` | 私有命令发送队列 |
-| `wireless_sync_prarm` | `modules/wireless/wireless_sync_param.c:4` | 同步参数状态（接收端用） |
-| `dac0_out_cfg` | `modules/audio/dac0_out.c:10` | DAC0 输出状态 |
-| `aufifo0_cnt` | `modules/audio/dac0_out.c:12` | DAC FIFO 计数（跨文件） |
+| 名称                    | 文件:行                                         | 作用                                                     |
+| ----------------------- | ----------------------------------------------- | -------------------------------------------------------- |
+| `func_cb`               | `functions/func.c:4`                            | 顶层状态机上下文（`func_cb.sta` 控制当前功能）           |
+| `sys_cb`                | `bsp/bsp_sys.c:8`                               | 系统状态（`pwroff`、`mic_alg_en`、`disp_sta` 等）        |
+| `xcfg_cb`               | `bsp/bsp_sys.c:7`                               | 产测配置（`wireless_adapter_en`、`le_name`、`osc_*` 等） |
+| `wireless_mic`          | `modules/wireless/wireless.c:37`                | 连接状态、变化标志                                       |
+| `mic_dec`               | `modules/wireless/mic_proc.c:50`                | 接收端解码状态（`pcm[LINK_NB]`、`sync_idx`）             |
+| `mic_enc`               | `modules/wireless/mic_proc.c:47`                | 发射端编码状态（接收端**不直接用**）                     |
+| `adapter_con`           | `modules/wireless/wireless_txrx_single.c:60-63` | RX 缓冲 + 状态                                           |
+| `device_con`            | `modules/wireless/wireless_txrx_single.c:53-56` | TX 缓冲（接收端**不直接用**）                            |
+| `adapter`               | `functions/func_adapter.c:27-31`                | 接收端状态机本地变量                                     |
+| `adapter_usb_init_flag` | `functions/func_adapter.c:34`                   | USB 设备启用标志                                         |
+| `txcmd[]`               | `modules/wireless/wireless_cmd.c:14`            | 私有命令发送队列                                         |
+| `wireless_sync_prarm`   | `modules/wireless/wireless_sync_param.c:4`      | 同步参数状态（接收端用）                                 |
+| `dac0_out_cfg`          | `modules/audio/dac0_out.c:10`                   | DAC0 输出状态                                            |
+| `aufifo0_cnt`           | `modules/audio/dac0_out.c:12`                   | DAC FIFO 计数（跨文件）                                  |
 
 ### 接收端特有的 `wireless_mic` 字段
 
@@ -974,22 +981,22 @@ struct wireless_mic_tag {
 
 ## 12. 关键回调接口（库 → 应用）
 
-| 回调 | 定义位置 | 触发时机 | 用途 |
-| --- | --- | --- | --- |
-| `ble_adv_set_enable` | `libs/ble/api_wireless_mic.h:64` | 应用调用 | 切换广播（可发现/可连接） |
-| `ble_scan_set_enable` | `libs/ble/api_wireless_mic.h:65` | 应用调用 | 开启/关闭扫描 |
-| `wireless_emit_notice` | `wireless_proc.c:91` | 连接/断开/失败 | 状态机转移 + 抬落主频 |
-| `wireless_d2a_set_rxpkt_cb` | `wireless_txrx_single.c:256` | 接收 1 包 | 写 RX 缓冲 |
-| `wireless_d2a_set_rxdec_cb` | `wireless_txrx_single.c:273` | 接收完成 | 触发解码到线程 |
-| `wireless_d2a_dac_dma_cb` | `wireless_txrx_single.c:284` | 解码完成 | 启动 DAC DMA |
-| `wireless_d2a_dac_fifo_cb` | `wireless_txrx_single.c:243` | DAC 取 fifo | 同步调速 |
-| `wireless_d2a_end_ind_cb` | `wireless_txrx_single.c:314` | 链路断开 | 复位 RX 状态 |
-| `ble_con_user_cmd_rx_cb` | `wireless_cmd.c:115` | 收到私有命令 | 分发到 `wireless_rx_cmd()` |
-| `ble_con_user_cmd_get_tx_cb` | `wireless_cmd.c:121` | 取要发送的命令 | 队列出队 |
-| `ble_con_user_cmd_tx_cfm_cb` | `wireless_cmd.c:127` | 发送完成 | 通知是否还有命令 |
-| `wireless_d2a_get_rx_frame` | 调用方 | 接收 1 帧 | 从 RX 缓冲取一帧 |
-| `mic_dec_prco_cb` | `mic_proc.c:550` | 解码完成 | 输出到 DAC/USB |
-| `bsp_ble_init` | `wireless.c:223` | 应用调用 | 蓝牙协议栈初始化 |
+| 回调                         | 定义位置                         | 触发时机       | 用途                       |
+| ---------------------------- | -------------------------------- | -------------- | -------------------------- |
+| `ble_adv_set_enable`         | `libs/ble/api_wireless_mic.h:64` | 应用调用       | 切换广播（可发现/可连接）  |
+| `ble_scan_set_enable`        | `libs/ble/api_wireless_mic.h:65` | 应用调用       | 开启/关闭扫描              |
+| `wireless_emit_notice`       | `wireless_proc.c:91`             | 连接/断开/失败 | 状态机转移 + 抬落主频      |
+| `wireless_d2a_set_rxpkt_cb`  | `wireless_txrx_single.c:256`     | 接收 1 包      | 写 RX 缓冲                 |
+| `wireless_d2a_set_rxdec_cb`  | `wireless_txrx_single.c:273`     | 接收完成       | 触发解码到线程             |
+| `wireless_d2a_dac_dma_cb`    | `wireless_txrx_single.c:284`     | 解码完成       | 启动 DAC DMA               |
+| `wireless_d2a_dac_fifo_cb`   | `wireless_txrx_single.c:243`     | DAC 取 fifo    | 同步调速                   |
+| `wireless_d2a_end_ind_cb`    | `wireless_txrx_single.c:314`     | 链路断开       | 复位 RX 状态               |
+| `ble_con_user_cmd_rx_cb`     | `wireless_cmd.c:115`             | 收到私有命令   | 分发到 `wireless_rx_cmd()` |
+| `ble_con_user_cmd_get_tx_cb` | `wireless_cmd.c:121`             | 取要发送的命令 | 队列出队                   |
+| `ble_con_user_cmd_tx_cfm_cb` | `wireless_cmd.c:127`             | 发送完成       | 通知是否还有命令           |
+| `wireless_d2a_get_rx_frame`  | 调用方                           | 接收 1 帧      | 从 RX 缓冲取一帧           |
+| `mic_dec_prco_cb`            | `mic_proc.c:550`                 | 解码完成       | 输出到 DAC/USB             |
+| `bsp_ble_init`               | `wireless.c:223`                 | 应用调用       | 蓝牙协议栈初始化           |
 
 ---
 
@@ -1210,51 +1217,51 @@ flowchart LR
 
 ## 14. 实战调试清单
 
-| 现象 | 排查路径 |
-| --- | --- |
-| 接收端无法被发现 | `wireless_mic_role_init()` → `xcfg_cb.wireless_adapter_en` 是否为 1；`ble_adv_set_enable(1, 1)` 是否被调用 |
+| 现象                 | 排查路径                                                     |
+| -------------------- | ------------------------------------------------------------ |
+| 接收端无法被发现     | `wireless_mic_role_init()` → `xcfg_cb.wireless_adapter_en` 是否为 1；`ble_adv_set_enable(1, 1)` 是否被调用 |
 | 接收端被连上但无声音 | `sys_cb.mic_alg_en` 是否为 1；`adapter_init` 是否被调用；`WIRELESS_CON_CODEC_SEL` 两端是否一致；`WIRELESS_MIC_FRAME_SIZE` 是否一致 |
-| 声音卡顿 | 调大 `WIRELESS_MIC_TX_INTERVAL`、关闭部分算法；查 `wireless_d2a_dec_us` 是否覆盖实际解码时间 |
-| 一拖二只有一侧出声 | `mic_dec.frag_samples[0/1]` 是否正确计算（`adapter_init` 行 706-710）；检查 `ble_con_get_status()` 是否正确 |
-| DAC 有噪声 | 检查 `dac_sel`（单端 vs 差分）是否与 PCB 一致；`dac0_play_sync_fifocnt` 高水位/低水位是否合理 |
-| USB 插入无反应 | `BSP_USB_EN`；`ADAPTER_USB_MIC_RX_EN`；`UDE_MIC_EN`；`adapter_usb_init_flag` 是否被设 |
+| 声音卡顿             | 调大 `WIRELESS_MIC_TX_INTERVAL`、关闭部分算法；查 `wireless_d2a_dec_us` 是否覆盖实际解码时间 |
+| 一拖二只有一侧出声   | `mic_dec.frag_samples[0/1]` 是否正确计算（`adapter_init` 行 706-710）；检查 `ble_con_get_status()` 是否正确 |
+| DAC 有噪声           | 检查 `dac_sel`（单端 vs 差分）是否与 PCB 一致；`dac0_play_sync_fifocnt` 高水位/低水位是否合理 |
+| USB 插入无反应       | `BSP_USB_EN`；`ADAPTER_USB_MIC_RX_EN`；`UDE_MIC_EN`；`adapter_usb_init_flag` 是否被设 |
 | 接收到按键音量无变化 | `adapter_key_msg_tbl` 当前只支持 PP HOLD，按键应改在 mic 端发命令 |
-| LED 不亮 | `BSP_LED_EN=1`；`led_init()` 和 `led_set_sta_p` 路径是否有问题 |
-| PC 拔出不识别 | 检查 `usb_device_exit()` 是否被调；`adapter_usb_init_flag=0` |
+| LED 不亮             | `BSP_LED_EN=1`；`led_init()` 和 `led_set_sta_p` 路径是否有问题 |
+| PC 拔出不识别        | 检查 `usb_device_exit()` 是否被调；`adapter_usb_init_flag=0` |
 
 ---
 
 ## 15. 关键代码位置速查表
 
-| 关注点 | 位置 |
-| --- | --- |
-| 角色判定 | `modules/wireless/wireless_proc.c:5-18` |
-| 二进制加载 | `modules/wireless/wireless_proc.c:24-32` |
-| BLE 协议栈初始化 | `modules/wireless/wireless.c:223-239` |
-| 接收端状态机 | `functions/func_adapter.c:71-121` |
-| 接收端消息 | `functions/msg_adapter.c:5-50` |
-| 一拖二 slice 计算 | `modules/wireless/mic_proc.c:706-710` |
-| 接收端解码入口 | `modules/wireless/mic_proc.c:550-594` |
-| 接收端算法初始化 | `modules/wireless/mic_proc.c:700-734` |
-| 接收端解码输出 | `modules/wireless/mic_proc.c:393-546` |
-| 接收端清理 | `modules/wireless/mic_proc.c:736-750` |
-| RX 帧缓冲 | `modules/wireless/wireless_txrx_single.c:53-167` |
-| LC3S 解码 | `modules/codec/lc3s.c` |
-| DAC 接收端初始化 | `modules/audio/dac0_out.c:89-139` |
-| DAC 调速 | `modules/audio/dac0_out.c:56-77` |
-| MIX_DRC | `modules/audio/mic_eq_drc.c:61-78` |
-| PLC | `modules/voice/plc_soft.c:11-64` |
-| 私有命令队列 | `modules/wireless/wireless_cmd.c:16-99` |
-| 私有命令 API | `modules/wireless/wireless_cmd_api.c:8-292` |
-| 同步参数 | `modules/wireless/wireless_sync_param.c` |
-| 接收端消息分发 | `modules/wireless/wireless_cmd_api.c:256-283` |
-| 接收端 sync 处理 | `modules/wireless/wireless_sync_param.c:202-296` |
-| LED 切换 | `modules/wireless/wireless_proc.c:319-340` |
-| 按键扫描 | `bsp/bsp_key.c:71-135` |
-| 系统初始化 | `bsp/bsp_sys.c:200-267` |
-| USB 检测 | `functions/func_adapter.c:36-53` |
-| USB 消息 | `functions/msg_adapter.c:17-29` |
-| 当前配置 | `projects/microphone/config_ab5766_le_mic.h` |
+| 关注点            | 位置                                             |
+| ----------------- | ------------------------------------------------ |
+| 角色判定          | `modules/wireless/wireless_proc.c:5-18`          |
+| 二进制加载        | `modules/wireless/wireless_proc.c:24-32`         |
+| BLE 协议栈初始化  | `modules/wireless/wireless.c:223-239`            |
+| 接收端状态机      | `functions/func_adapter.c:71-121`                |
+| 接收端消息        | `functions/msg_adapter.c:5-50`                   |
+| 一拖二 slice 计算 | `modules/wireless/mic_proc.c:706-710`            |
+| 接收端解码入口    | `modules/wireless/mic_proc.c:550-594`            |
+| 接收端算法初始化  | `modules/wireless/mic_proc.c:700-734`            |
+| 接收端解码输出    | `modules/wireless/mic_proc.c:393-546`            |
+| 接收端清理        | `modules/wireless/mic_proc.c:736-750`            |
+| RX 帧缓冲         | `modules/wireless/wireless_txrx_single.c:53-167` |
+| LC3S 解码         | `modules/codec/lc3s.c`                           |
+| DAC 接收端初始化  | `modules/audio/dac0_out.c:89-139`                |
+| DAC 调速          | `modules/audio/dac0_out.c:56-77`                 |
+| MIX_DRC           | `modules/audio/mic_eq_drc.c:61-78`               |
+| PLC               | `modules/voice/plc_soft.c:11-64`                 |
+| 私有命令队列      | `modules/wireless/wireless_cmd.c:16-99`          |
+| 私有命令 API      | `modules/wireless/wireless_cmd_api.c:8-292`      |
+| 同步参数          | `modules/wireless/wireless_sync_param.c`         |
+| 接收端消息分发    | `modules/wireless/wireless_cmd_api.c:256-283`    |
+| 接收端 sync 处理  | `modules/wireless/wireless_sync_param.c:202-296` |
+| LED 切换          | `modules/wireless/wireless_proc.c:319-340`       |
+| 按键扫描          | `bsp/bsp_key.c:71-135`                           |
+| 系统初始化        | `bsp/bsp_sys.c:200-267`                          |
+| USB 检测          | `functions/func_adapter.c:36-53`                 |
+| USB 消息          | `functions/msg_adapter.c:17-29`                  |
+| 当前配置          | `projects/microphone/config_ab5766_le_mic.h`     |
 
 ---
 
@@ -1276,25 +1283,25 @@ flowchart LR
 
 ## 17. 接收端 vs 发射端对照速查
 
-| 维度 | 接收端 ADAPTER | 发射端 MIC_EMIT |
-| --- | --- | --- |
-| 入口函数 | `func_adapter()` (`func_adapter.c:222`) | `func_mic_emit()` (`func_mic_emit.c:212`) |
-| 入口处理 | `func_adapter_enter()` (`func_adapter.c:204`) | `func_mic_emit_enter()` (`func_mic_emit.c:175`) |
-| 状态机主函数 | `func_adapter_process_do()` (`func_adapter.c:71`) | `func_mic_emit_process_do()` (`func_mic_emit.c:51`) |
-| 状态机调度 | `func_adapter_process()` (`func_adapter.c:165`) | `func_mic_emit_process()` (`func_mic_emit.c:143`) |
-| 消息分发 | `func_adapter_message()` (`msg_adapter.c:5`) | `func_mic_emit_message()` (`msg_mic_emit.c:5`) |
-| 状态字段 | `adapter` (`func_adapter.c:27`) | `mic_emit` (`func_mic_emit.c:27`) |
-| 按键表 | `adapter_key_msg_tbl` (port_key.c:61) | `mic_emit_key_msg_tbl` (port_key.c:43) |
-| 蓝牙数据缓冲 | `adapter_con` (`wireless_txrx_single.c:60`) | `device_con` (`wireless_txrx_single.c:53`) |
-| 音频缓冲 | `mic_dec` (`mic_proc.c:50`) | `mic_enc` (`mic_proc.c:47`) |
-| 蓝牙初始化 | `wireless_con_adapter_init()` (`wireless_txrx_single.c:329`) | `wireless_con_device_init()` (`wireless_txrx_single.c:338`) |
+| 维度         | 接收端 ADAPTER                                               | 发射端 MIC_EMIT                                              |
+| ------------ | ------------------------------------------------------------ | ------------------------------------------------------------ |
+| 入口函数     | `func_adapter()` (`func_adapter.c:222`)                      | `func_mic_emit()` (`func_mic_emit.c:212`)                    |
+| 入口处理     | `func_adapter_enter()` (`func_adapter.c:204`)                | `func_mic_emit_enter()` (`func_mic_emit.c:175`)              |
+| 状态机主函数 | `func_adapter_process_do()` (`func_adapter.c:71`)            | `func_mic_emit_process_do()` (`func_mic_emit.c:51`)          |
+| 状态机调度   | `func_adapter_process()` (`func_adapter.c:165`)              | `func_mic_emit_process()` (`func_mic_emit.c:143`)            |
+| 消息分发     | `func_adapter_message()` (`msg_adapter.c:5`)                 | `func_mic_emit_message()` (`msg_mic_emit.c:5`)               |
+| 状态字段     | `adapter` (`func_adapter.c:27`)                              | `mic_emit` (`func_mic_emit.c:27`)                            |
+| 按键表       | `adapter_key_msg_tbl` (port_key.c:61)                        | `mic_emit_key_msg_tbl` (port_key.c:43)                       |
+| 蓝牙数据缓冲 | `adapter_con` (`wireless_txrx_single.c:60`)                  | `device_con` (`wireless_txrx_single.c:53`)                   |
+| 音频缓冲     | `mic_dec` (`mic_proc.c:50`)                                  | `mic_enc` (`mic_proc.c:47`)                                  |
+| 蓝牙初始化   | `wireless_con_adapter_init()` (`wireless_txrx_single.c:329`) | `wireless_con_device_init()` (`wireless_txrx_single.c:338`)  |
 | 蓝牙事件回调 | `wireless_emit_notice()` 接收端分支 (wireless_proc.c:91-150) | `wireless_emit_notice()` 发射端分支 (wireless_proc.c:91-150) |
-| 音频初始化 | `adapter_init()` (`mic_proc.c:700`) | `mic_emit_init()` (`mic_proc.c:597`) |
-| 音频清理 | `adapter_reset()` (`mic_proc.c:736`) | `mic_emit_reset()` (`mic_proc.c:677`) |
-| 算法侧 | 解码 + PLC + MIX_DRC + DAC + USB | 编码 + ECHO + EQ/DRC + soft_gain |
-| 输出 | DAC + USB UAC MIC | SDDAC 侦听麦 |
-| 输入 | BLE RX | SDADC（麦克风） |
-| 关闭使能回调 | `wireless_d2a_set_rxpkt_cb` | `wireless_d2a_set_txbuf_cb` `wireless_d2a_put_tx_frame` |
+| 音频初始化   | `adapter_init()` (`mic_proc.c:700`)                          | `mic_emit_init()` (`mic_proc.c:597`)                         |
+| 音频清理     | `adapter_reset()` (`mic_proc.c:736`)                         | `mic_emit_reset()` (`mic_proc.c:677`)                        |
+| 算法侧       | 解码 + PLC + MIX_DRC + DAC + USB                             | 编码 + ECHO + EQ/DRC + soft_gain                             |
+| 输出         | DAC + USB UAC MIC                                            | SDDAC 侦听麦                                                 |
+| 输入         | BLE RX                                                       | SDADC（麦克风）                                              |
+| 关闭使能回调 | `wireless_d2a_set_rxpkt_cb`                                  | `wireless_d2a_set_txbuf_cb` `wireless_d2a_put_tx_frame`      |
 
 ---
 
