@@ -1097,33 +1097,33 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     autonumber
-    participant PC as USB VBUS/D+/D-
+    participant PC as USB VBUS Dp Dn
     participant USB as USB Device 中断
-    participant DET as usb_detect<br/>func_adapter.c:36
-    participant DEV as dev_online_filter<br/>modules/device
+    participant DET as usb_detect func_adapter_c_36
+    participant DEV as dev_online_filter modules_device
     participant Q as msg_queue
-    participant ME as func_adapter_message<br/>msg_adapter.c:18
+    participant ME as func_adapter_message msg_adapter_c_18
     participant UDE as usb_device_enter
-    participant LOOP as func_adapter_process<br/>func_adapter.c:165
+    participant LOOP as func_adapter_process func_adapter_c_165
     participant UDP as usb_device_process
     participant UAC as USB UAC 协议
     PC->>USB: 插入 VBUS
-    USB->>DET: usbchk_connect() == 1
+    USB->>DET: usbchk_connect 等于 1
     DET->>DEV: 在线去抖
-    DEV->>Q: msg_enqueue(EVT_PC_INSERT)
+    DEV->>Q: msg_enqueue EVT_PC_INSERT
     ME->>Q: msg_dequeue
-    ME->>UDE: usb_device_enter(UDE_ENUM_TYPE)
-    ME->>ME: adapter_usb_init_flag = 1
-    LOOP->>UDP: 检测到 flag=1
+    ME->>UDE: usb_device_enter
+    ME->>ME: adapter_usb_init_flag 置 1
+    LOOP->>UDP: 检测到 flag 等于 1
     UDP->>UAC: UAC MIC 描述符交换
-    UAC->>PC: 枚举成功<br/>建立 48kHz 音频流
-    Note over ME,UDP: mic_dec_pcm_out() → usb_mic_in_audio_input()<br/>发送到 isochronous IN 端点
+    UAC->>PC: 枚举成功 建立 48kHz 音频流
+    Note over ME,UDP: mic_dec_pcm_out 到 usb_mic_in_audio_input<br/>发送到 isochronous IN 端点
     PC-->>USB: 拔出 VBUS
-    USB->>DET: usbchk_connect() == 0
+    USB->>DET: usbchk_connect 等于 0
     DET->>DEV: 离线去抖
-    DEV->>Q: msg_enqueue(EVT_PC_REMOVE)
-    ME->>ME: usb_device_exit()
-    ME->>ME: adapter_usb_init_flag = 0
+    DEV->>Q: msg_enqueue EVT_PC_REMOVE
+    ME->>ME: usb_device_exit
+    ME->>ME: adapter_usb_init_flag 置 0
 ```
 
 ### 13.5 接收端全局架构图（Layer View）
