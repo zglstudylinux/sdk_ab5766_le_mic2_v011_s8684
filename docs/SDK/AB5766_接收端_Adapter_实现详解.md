@@ -1094,36 +1094,27 @@ sequenceDiagram
 
 ### 13.4 USB 麦克风枚举与去抖动
 
+> 本节改用 flowchart 表达时序，避免 sequenceDiagram 在某些 Mermaid 渲染器上对中英文混合 message text 的解析兼容性问题。
+
 ```mermaid
-sequenceDiagram
-    autonumber
-    participant PC as USB VBUS Dp Dn
-    participant USB as USB Device 中断
-    participant DET as usb_detect func_adapter_c_36
-    participant DEV as dev_online_filter modules_device
-    participant Q as msg_queue
-    participant ME as func_adapter_message msg_adapter_c_18
-    participant UDE as usb_device_enter
-    participant LOOP as func_adapter_process func_adapter_c_165
-    participant UDP as usb_device_process
-    participant UAC as USB UAC 协议
-    PC->>USB: 插入 VBUS
-    USB->>DET: usbchk_connect 等于 1
-    DET->>DEV: 在线去抖
-    DEV->>Q: msg_enqueue EVT_PC_INSERT
-    ME->>Q: msg_dequeue
-    ME->>UDE: usb_device_enter
-    ME->>ME: adapter_usb_init_flag 置 1
-    LOOP->>UDP: 检测到 flag 等于 1
-    UDP->>UAC: UAC MIC 描述符交换
-    UAC->>PC: 枚举成功 建立 48kHz 音频流
-    Note over ME,UDP: mic_dec_pcm_out 到 usb_mic_in_audio_input<br/>发送到 isochronous IN 端点
-    PC-->>USB: 拔出 VBUS
-    USB->>DET: usbchk_connect 等于 0
-    DET->>DEV: 离线去抖
-    DEV->>Q: msg_enqueue EVT_PC_REMOVE
-    ME->>ME: usb_device_exit
-    ME->>ME: adapter_usb_init_flag 置 0
+flowchart TD
+    P1["PC 插入 VBUS"] --> P2["USB 设备中断"]
+    P2 --> P3["usb_detect 检测到在线"]
+    P3 --> P4["dev 在线去抖"]
+    P4 --> P5["投递 EVT PC INSERT"]
+    P6["func adapter 主循环"] --> P7["从消息队列取出"]
+    P7 --> P8["进入 USB 设备模式"]
+    P8 --> P9["标记 usb init flag"]
+    P9 --> P10["调度 usb 设备进程"]
+    P10 --> P11["UAC 描述符交换"]
+    P11 --> P12["PC 枚举成功"]
+    P8 -.PCM 数据通路.-> P10
+    P13["PC 拔出 VBUS"] --> P14["USB 设备中断"]
+    P14 --> P15["usb_detect 检测到离线"]
+    P15 --> P16["dev 离线去抖"]
+    P16 --> P17["投递 EVT PC REMOVE"]
+    P17 --> P18["退出 USB 设备"]
+    P18 --> P19["清除 usb init flag"]
 ```
 
 ### 13.5 接收端全局架构图（Layer View）
