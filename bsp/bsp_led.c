@@ -61,6 +61,10 @@ void led2_port_out_mode(uint8_t mode)                    //一个IO推两个LED�
 AT(.com_text.led_disp)
 void bled_set_on(void)
 {
+    if (!xcfg_cb.bled_disp_en) {
+        return;
+    }
+
     if (led_cb.led2_flag) {
         led2_port_out_mode(GPIO_MODE_DIGITAL);               //设为数字IO，拉低则点亮蓝灯
         gpio_reset_bits(BSP_BLED_PORT , BSP_BLED_PIN);
@@ -72,6 +76,10 @@ void bled_set_on(void)
 AT(.com_text.led_disp)
 void bled_set_off(void)
 {
+    if (!xcfg_cb.bled_disp_en) {
+        return;
+    }
+
     if (led_cb.led2_flag) {
         led2_port_out_mode(GPIO_MODE_ANALOG);                //设为模拟IO，熄灭蓝灯/红灯
     } else {
@@ -206,6 +214,10 @@ AT(.com_text.led_disp)
 void led_scan(u32 tick)
 {
     u16 offset;
+
+    if (!xcfg_cb.bled_disp_en) {
+        return;
+    }
 
     led_cb_t *s;
     s = &led_cb;
