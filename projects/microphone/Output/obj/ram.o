@@ -128,6 +128,10 @@ SECTIONS
         *(.text.lc3_enc*)
         *(.rodata.lc3_enc*)
         __code_end_lc3enc = .;
+        __code_start_ains4_32k = .;
+        *(.text.ains4_32k_proc*)
+        *(.rodata.ains4_32k*)
+        __code_end_ains4_32k = .;
         __code_start_mic_emit_proc = .;
         *(.text.mic_emit.proc*)
         *(.rodata.mic_emit.proc*)
@@ -153,9 +157,9 @@ SECTIONS
         __buf_start_lc3enc = .;
         *(.buf.lc3_enc*)
         __buf_end_lc3enc = .;
-         __buf_start_mic_effect = .;
-        *(.buf.mic_effect*)
-         __buf_end_mic_effect = .;
+        __buf_start_ains4_32k = .;
+        *(.buf.ains4_32k*)
+        __buf_end_ains4_32k = .;
         __buf_start_esbc_enc = .;
         *(.buf.esbc_enc)
         __buf_end_esbc_enc = .;

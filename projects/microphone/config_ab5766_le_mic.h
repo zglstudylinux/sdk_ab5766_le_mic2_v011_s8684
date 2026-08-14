@@ -96,7 +96,7 @@
 
 //设备端算法配置
 #define WIRELESS_MIC_SOFT_GAIN_EN               1               //发射端是否开启 带保护的数字增益功能
-#define WIRELESS_MIC_EQ_DRC_EN                  1               //发射端是否开启EQ_DRC功能
+#define WIRELESS_MIC_EQ_DRC_EN                  0               //发射端是否开启EQ_DRC功能
 #define WIRELESS_MIC_EQ_DRC_DELAY               WIRELESS_MIC_EQ_DRC_EN*200//EQ_DRC运算时间
 #define WIRELESS_MIC_ECHO_EN                    0               //发射端是否开启 ECHO音效
 #define WIRELESS_MIC_ECHO_DELAY                 WIRELESS_MIC_ECHO_EN*200//ECHO运算时间
@@ -113,14 +113,14 @@
 #define WIRELESS_ALLPASS_FILTER_CHANGE_DELAY    WIRELESS_ALLPASS_FILTER_CHANGE_EN*200//随机相位运算时间 (调试中)
 #define WIRELESS_MIC_DNR_FRE_EN                 0
 #define WIRELESS_MIC_DNR_FRE_DELAY              WIRELESS_MIC_DNR_FRE_EN * 720   //发射端DNR_FRE运算时间
-#define WIRELESS_MIC_32K_EN                     0               //是否使能mic 32k采样率
+#define WIRELESS_MIC_32K_EN                     1               //是否使能mic 32k采样率
 #define WIRELESS_MIC_SRC_DELAY                  WIRELESS_MIC_32K_EN*200//EQ_DRC运算时间
-#define WIRELESS_MIC_AINS4_32K_EN               0
+#define WIRELESS_MIC_AINS4_32K_EN               1
 
 //适配器端私有配置
 #define ADAPTER_DAC_OUTPUT_EN                   1               //适配器是否支持dac输出MIC音频
 #define ADAPTER_USB_SPK_TX_EN                   0               //发射端是否开启usb spk功能（下行音频，不支持）
-#define ADAPTER_USB_MIC_RX_EN                   1               //接收端是否开启usb mic功能（上行音频，不支持）
+#define ADAPTER_USB_MIC_RX_EN                   0               //接收端是否开启usb mic功能（上行音频，不支持）
 #define ADAPTER_MIX_DRC_EN                      1               //混音DRC功能(用于一拖二混音)
 #define ADAPTER_MIX_DRC_DELAY                   ADAPTER_MIX_DRC_EN*250//mix drc运算时间
 #define ADAPTER_FREQ_SHIFT_EN                   0               //适配器是否开启 移频（防啸叫）

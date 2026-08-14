@@ -34,9 +34,9 @@
         <add key="rf_pa_gain" value="3" />
         <add key="rf_pa_vsel" value="8" />
         <add key="rf_pa_mode" value="1" />
-        <add key="mic_bias_method" value="1" />
+        <add key="mic_bias_method" value="0" />
         <add key="mic_bias_res" value="6" />
-        <add key="mic_anl_gain" value="1" />
+        <add key="mic_anl_gain" value="2" />
         <add key="mic_dig_gain_idx" value="0" />
         <add key="led_disp_en" value="False" />
         <add key="bled_io_sel" value="160" />
@@ -72,7 +72,7 @@
         <add key="charge_trickle_curr" value="20mA" />
         <add key="charge_stop_time" value="3" />
         <add key="charge_dc_in_rst" value="False" />
-        <add key="mic_dig_gain" value="0" />
+        <add key="mic_dig_gain" value="26" />
         <add key="pwron_press_time" value="3" />
         <add key="pwroff_press_time" value="3" />
         <add key="double_key_time" value="5" />
@@ -80,5 +80,6 @@
         <add key="rled_disp_en" value="False" />
         <add key="rled_io_sel" value="160" />
         <add key="dac_sel" value="0" />
+        <add key="ch_box_type" value="0" />
     </appSettings>
 </configuration>

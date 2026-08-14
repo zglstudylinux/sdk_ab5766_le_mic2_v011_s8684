@@ -1,6 +1,6 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <configuration>
-  <workspace firmWare="">
+  <workspace firmWare="D:\Code\AI\sdk_ab5766_le_mic2_v011_s8684_20260427\app_branch01\projects\microphone\Output\bin\app.dcf">
     <project openSeq="Last" type="Effect" path=".\effect.bts" />
   </workspace>
 </configuration>
