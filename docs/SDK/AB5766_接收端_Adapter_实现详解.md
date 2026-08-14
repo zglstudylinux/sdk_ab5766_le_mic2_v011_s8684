@@ -1083,7 +1083,7 @@ flowchart TD
     loop --> msg[msg_dequeue 派发到 func_adapter_message<br/>msg_adapter.c:5]
     proc1 -.start_action.-> conn[wireless_emit_notice CONNECTED<br/>wireless_proc.c:98-150]
     conn --> c1[sys_clk_req 160M · wireless_proc.c:103]
-    conn --> c2{connected_sta==0? 第一路门控<br/>wireless_proc.c:102]
+    conn --> c2{connected_sta==0? 第一路门控<br/>wireless_proc.c:102}
     c2 -->|是| ci[adapter_init · mic_proc.c:700]
     c2 -->|否 第一路已初始化| skip[跳过初始化<br/>第二路不重复 init]
     ci --> c3[sys_cb.mic_alg_en = 1 · wireless_proc.c:110]
