@@ -55,7 +55,7 @@ flowchart TD
 | `xcfg_cb.wireless_mic_emit_en` 为真 | `cfg_wireless_role = false` → **发射端** |
 | 两者都关 | 默认 `false` → **发射端** |
 
-`xcfg_cb` 由 `bsp_param_init()` 从 Flash 加载（`bsp/bsp_sys.c:243`），其中 `wireless_adapter_en` / `wireless_mic_emit_en` 是产测写入的标志位，**用于同一份固件烧到不同板子上时自动切换角色**。
+`xcfg_cb` 由 `xcfg_init()` 从 Flash 加载（`bsp/bsp_sys.c:202`，即 `if (!xcfg_init(&xcfg_cb, sizeof(xcfg_cb)))`），其中 `wireless_adapter_en` / `wireless_mic_emit_en` 是产测写入的标志位，**用于同一份固件烧到不同板子上时自动切换角色**。
 
 ### 1.2 角色判定决策图
 
@@ -75,13 +75,13 @@ flowchart LR
     class Em,Code2,EmDef warn
 ```
 
-### 1.2 发射端功能入口
+### 1.3 发射端功能入口
 
 ```
-func_run()  [functions/func.c:148-177]
+func_run()  [functions/func.c:134-178]
     └─ switch(func_cb.sta)
         case FUNC_MIC_EMIT:
-            func_mic_emit()  [functions/func_mic_emit.c:212-227]
+            func_mic_emit()  [functions/func_mic_emit.c:211-227]
                 ├─ func_mic_emit_enter()           [functions/func_mic_emit.c:175-187]
                 ├─ while (func_cb.sta == FUNC_MIC_EMIT) {
                 │      func_mic_emit_process()     [functions/func_mic_emit.c:143-172]
@@ -166,7 +166,7 @@ flowchart TD
 | `led_init()` | 224 | LED 初始化 |
 | `power_on_check()` | 238 | 按住 PWR 才开机的逻辑 |
 | `sys_clk_set(SYS_CLK_SEL)` | 241 | 切主频（默认 24M） |
-| `bsp_param_init()` | 243 | 加载音量、绑定等参数 |
+| `bsp_param_init()` | 243 | 初始化参数区管理器（`cm_init()`，仅准备读写接口，不加载 `xcfg_cb`，见 `bsp/bsp_param.c:15-20`） |
 | `xosc_init()` | 245 | 晶振校准 |
 | `sys_set_tmr_enable(1, 1)` | 248 | 启动 5ms / 1ms 定时器 |
 
@@ -219,7 +219,7 @@ void func_run(void) {
 [FUNC_ADAPTER]  = {adapter_key_msg_tbl,  0},   // 接收端按键映射表
 ```
 
-`mic_emit_key_msg_tbl` 定义在 `functions/msg_mic_emit.c` 之外的 `msg_mic_emit.h`/`messages.h` 文件中，**把硬件按键事件映射为 `MSG_VOL_UP` / `MSG_MIC_MUTE` 等应用层消息**。
+`mic_emit_key_msg_tbl` 实际定义在 `projects/microphone/port/port_key.c:43`（K12 分支）与 `:51`（`#else` 分支），并由 `functions/func.h:29` 以 `extern` 声明，**把硬件按键事件映射为 `MSG_VOL_UP` / `MSG_VOL_MUTE` 等应用层消息**（`functions/msg_mic_emit.c:48` 处理 `case MSG_VOL_MUTE:`）。
 
 ---
 
@@ -227,7 +227,7 @@ void func_run(void) {
 
 ### 4.1 函数一览
 
-`functions/func_mic_emit.c:36-227` 提供了 5 个函数：
+`functions/func_mic_emit.c:36-227` 提供了 6 个函数：
 
 | 行号 | 函数 | 作用 |
 | --- | --- | --- |
@@ -285,7 +285,7 @@ stateDiagram-v2
 
 ### 4.3 主循环
 
-`func_mic_emit()` (`func_mic_emit.c:212-227`)：
+`func_mic_emit()` (`func_mic_emit.c:211-227`)：
 
 ```c
 void func_mic_emit(void) {
@@ -370,7 +370,7 @@ flowchart LR
     class mute,zero,ble_tx,dac0 out
 ```
 
-![audio pipeline](https://via.placeholder.com/600x120?text=SDADC+%E2%86%92+mic_proc+%E2%86%92+TX)
+> 上图即发射端音频通路总览：`SDADC 采集 → mic_enc_proc_cb（启动丢帧/静音/算法链）→ LC3S 编码 → wireless_d2a_put_tx_frame → BLE 物理发送`，其中 `WIRELESS_MIC_DAC_OUT_EN=1` 时编码后另有 `dac0_out_audio_input` 侦听麦支路。
 
 ### 5.2 关键代码节点
 
@@ -379,44 +379,64 @@ flowchart LR
 `mic_emit_init()`（`modules/wireless/mic_proc.c:597-675`）按配置开关依次初始化：
 
 ```c
+mic_emit_alg_init();                                         // 600  ⚠️ 空函数（见下注）
 memset(&mic_enc, 0x00, sizeof(mic_enc));                    // 602
 mic_enc.first_pkt = true;                                    // 603
-param_mic_mute_level_read(&mic_enc.mute_en);                 // 605 (WIRELESS_MIC_PARAM_MEMORY_EN)
+#if WIRELESS_MIC_PARAM_MEMORY_EN
+    param_mic_mute_level_read((u8 *)&mic_enc.mute_en);     // 605
+#endif
 #if WIRELESS_MAX_POWER_DETECT_EN
-    mic_max_power_detect_init(0, samples);                    // 608
+    mic_max_power_detect_init(0, samples);                  // 608
+#endif
+#if ADAPTER_SYNC_PARAM_EN
+    mic_enc.mute_en = 1;   // 受 adapter 同步参数前先 mute  // 611-612
+#endif
+#if WIRELESS_CON_CODEC_SEL == CODEC_LC3S
+    lc3s_enc_init(SAMPLE_RATE, samples);                    // 621  编码器初始化
+#endif
+#if WIRELESS_ALLPASS_FILTER_CHANGE_EN
+    allpass_filter_change_set(0, 100);                      // 625  随机相位(防啸叫)
 #endif
 #if WIRELESS_MIC_32K_EN
-    src_init(0, 32000, 48000);                                // 629   32k → 48k 重采样
+    src_init(0, 32000, 48000);                               // 629   32k → 48k 重采样
 #endif
 #if WIRELESS_MIC_AINS4_32K_EN
-    ains4_32k_mic_init(0, samples, 1);                        // 633
+    ains4_32k_mic_init(0, samples, 1);                      // 633
 #endif
 #if WIRELESS_MIC_ECHO_EN
-    echo_audio_init(0, samples, 1);                           // 637
+    echo_audio_init(0, samples, 1);                          // 637
 #endif
 #if WIRELESS_MIC_MAGIC_EN
-    magic_audio_init(0, samples);                             // 641
+    magic_audio_init(0, samples);                           // 641
 #endif
 #if WIRELESS_MIC_ROBOTIZATION_EN
-    robotization_mic_init(0, samples, 1);                     // 645
+    robotization_mic_init(0, samples, 1);                   // 645
 #endif
 #if WIRELESS_MIC_ROOM_REVERB_EN
-    room_reverb_audio_init_cfg(0, samples);                  // 649-650
+    room_reverb_audio_init_cfg(0, samples);                 // 649  房间混响参数配置
+    room_reverb_audio_init(0, samples);                     // 650  房间混响初始化(两次)
 #endif
 #if WIRELESS_MIC_EQ_DRC_EN
-    mic_eq_drc_init(0, samples, 1);                           // 654
+    mic_eq_drc_init(0, samples, 1);                         // 654  硬件 EQ/DRC + soft_gain
 #endif
 #if WIRELESS_MIC_AGC_EN
-    agc_audio_init(0, samples);                               // 658
+    agc_audio_init(0, samples);                             // 658
 #endif
 #if WIRELESS_MIC_DNR_FRE_EN
-    dnr_fre_mic_init(0, samples, 0);                          // 662
+    dnr_fre_mic_init(0, samples, 0);                        // 662
 #endif
 #if WIRELESS_MIC_DAC_OUT_EN
-    dac0_out_init(0, samples, 0);                             // 666  侦听麦
+    dac0_out_init(0, samples, 0);                           // 666  侦听麦
 #endif
-bsp_sdadc_init();                                            // 669
+bsp_sdadc_init();                                            // 669  无条件
+#if WIRELESS_MIC_LOWPASS_EN
+    bsp_sdadc_lowpass_filter_en();                          // 672  SDADC 低通滤波
+#endif
 ```
+
+> ⚠️ **关键说明（`mic_emit_alg_init()` 为空函数）**：`mic_emit_alg_init()`（`mic_proc.c:58-60`）函数体为空，**不统一初始化任何算法**。所有算法（EQ/DRC、ECHO、MAGIC、AGC、LC3S 编码器、DAC_OUT 等）都在 `mic_emit_init()` 内通过 `#if 宏` 逐项条件编译——**只有宏=1 的初始化调用才会被编译进镜像**。当前默认配置（`config_ab5766_le_mic.h:98-118`）仅 `WIRELESS_MIC_SOFT_GAIN_EN=1`、`WIRELESS_MIC_EQ_DRC_EN=1`、`WIRELESS_MIC_DAC_OUT_EN=1`（及编码器 LC3S）为开启项，其余 `ECHO/MAGIC/AGC/ROOM_REVERB/ROBOTIZATION/DNR_FRE/AINS4_32K` 宏=0，对应初始化调用**不编译**。
+>
+> **初始化时机与时序**：`mic_emit_init()` 在 `wireless_emit_notice(BT_NOTICE_WIRELESS_CONNECTED)` 中**仅当 `connected_sta==0`（0→1 第一路连接）时调用一次**（`wireless_proc.c:102-107`），第二路连接不会重新初始化。`sys_cb.mic_alg_en = 1` 在 `mic_emit_init()` 返回**之后**才设置（`wireless_proc.c:110`），属时序关键——初始化完成前算法链不被使能。
 
 #### 5.2.2 采样 → 编码 RX 流程
 
@@ -487,7 +507,7 @@ void mic_enc_proc_cb(s16 *pcm, uint samples) {
     #endif
 
     wireless_d2a_put_tx_frame(mic_enc.buffer, WIRELESS_MIC_FRAME_SIZE);  // 363 → 发送缓冲
-    wl_play_sync_tick1(WIRELESS_MIC_TX_INTERVAL*2/COMB_NB, SAMPLE_RATE_48K);  // 366
+    wl_play_sync_tick1(WIRELESS_MIC_TX_INTERVAL*2/WIRELESS_MIC_COMB_NB, SAMPLE_RATE_48K);  // 366
 
     #if WIRELESS_MIC_DAC_OUT_EN
         dac0_out_audio_input(pcm, samples, 0);              // 375 侦听麦
@@ -559,7 +579,7 @@ LC3S 帧大小：见 `WIRELESS_MIC_FRAME_SIZE`（`config_ab5766_le_mic.h:80`，�
 
 ### 6.1 一拖二模式专属：`wireless_con_role()`（接收端用）
 
-发射端**不调用** `wireless_con_role()`（`modules/wireless/func_adapter.c:132-162`），但当 `WIRELESS_CON_PAIR_MODE=1` 时，发射端会在 `wireless_emit_notice()` 内被记录 `sys_cb.con_role_data[1]/[2]`。
+发射端**不调用** `wireless_con_role()`（`functions/func_adapter.c:133-162`，用于接收端判断主副麦），但当 `WIRELESS_CON_PAIR_MODE=1` 时，发射端会在 `wireless_emit_notice()` 内被记录 `sys_cb.con_role_data[1]/[2]`。
 
 ### 6.2 私有命令发送
 
@@ -590,7 +610,7 @@ bool wireless_send_cmd(u8 index, u8 *cmd, u8 len) {
 
 | 名称 | 值 | 含义 |
 | --- | --- | --- |
-| `cfg_wireless_con_interval` | `WIRELESS_CON_INTERVAL * LINK_NB`（`config_ab5766_le_mic.h` 默认 2×2=4，单位 1.25ms = 5ms） | 连接间隔 |
+| `cfg_wireless_con_interval` | `WIRELESS_CON_INTERVAL * WIRELESS_CON_LINK_NB`（`wireless.c:13`）。`WIRELESS_CON_INTERVAL` 定义在 `config_extra.h`（`VERS=7`+`TX_INTERVAL=4` 命中 `#else` 分支 → 60），`WIRELESS_CON_LINK_NB=2`（`config_ab5766_le_mic.h:76`），故 60×2=120，单位 1.25ms = **150ms** | 连接间隔 |
 | `cfg_wireless_tx_interval` | `WIRELESS_MIC_TX_INTERVAL`（默认 4，单位 1.25ms = 5ms） | 音频发送周期 |
 | `cfg_wireless_tx_retry` | `WIRELESS_MIC_RETRY_NB`（默认 3） | 单包重传次数 |
 | `cfg_wireless_d2a_tx_size` | `MIC_TX_BUFFER_SIZE` | 发射 buffer 大小 |
@@ -673,44 +693,78 @@ bool ble_scan_rx_rep_cb(uint8_t *addr, uint8_t addr_type) {
 
 | 宏 | 默认 | 含义 | 关键调用 |
 | --- | --- | --- | --- |
-| `WIRELESS_MIC_SOFT_GAIN_EN` | 1 | 带保护数字增益 | `soft_gain_init()` `soft_gain_up/down()` |
-| `WIRELESS_MIC_EQ_DRC_EN` | 1 | 硬件 EQ/DRC | `mic_eq_drc_init()` -> `loc_mic_pacc_*` |
+| `WIRELESS_MIC_SOFT_GAIN_EN` | 1 | 带保护数字增益 | `soft_gain_init()`（在 `mic_eq_drc_init` 内 `mic_eq_drc.c:45` 调用）`soft_gain_up/down()` |
+| `WIRELESS_MIC_EQ_DRC_EN` | 1 | 硬件 EQ/DRC | `mic_eq_drc_init()` -> `loc_mic_pacc_*`（实现在 `modules/effect/mic_effect.c`） |
 | `WIRELESS_MIC_ECHO_EN` | 0 | 混响 | `echo_audio_init()` |
 | `WIRELESS_MIC_MAGIC_EN` | 0 | 魔音 | `magic_audio_init()` |
 | `WIRELESS_MIC_AGC_EN` | 0 | AGC | `agc_audio_init()` |
+| `WIRELESS_MIC_ROOM_REVERB_EN` | 0 | 房间混响 | `room_reverb_audio_init_cfg()` + `room_reverb_audio_init()` |
+| `WIRELESS_MIC_ROBOTIZATION_EN` | 0 | 机器人音效 | `robotization_mic_init()` |
+| `WIRELESS_MIC_DNR_FRE_EN` | 0 | 频域降噪 | `dnr_fre_mic_init()` |
+| `WIRELESS_MIC_AINS4_32K_EN` | 0 | AINS4 降噪(32k) | `ains4_32k_mic_init()` |
+| `WIRELESS_ALLPASS_FILTER_CHANGE_EN` | 0 | 随机相位(防啸叫) | `allpass_filter_change_set()` |
+| `WIRELESS_MAX_POWER_DETECT_EN` | 0 | 麦能量检测 | `mic_max_power_detect_init()` |
 | `WIRELESS_MIC_DAC_OUT_EN` | 1 | 侦听麦 | `dac0_out_init()` `dac0_out_audio_input()` |
 | `WIRELESS_MIC_LOWPASS_EN` | 0 | SDADC 低通滤波 | `bsp_sdadc_lowpass_filter_en()` |
 | `WIRELESS_MIC_KEY_PRESS_MUTE_EN` | 0 | 按键按下 mute | `mic_enc_key_press_mute_en_set()` |
 
 ### 9.1 算法数据流（`mic_enc_proc_cb` 视角）
 
+以下顺序严格对应 `modules/wireless/mic_proc.c:277-378` 的源码排列，行号为 `mic_proc.c` 实际行号。`#if` 宏=0 的节点在当前配置下不编译、不执行，但保留在链路中标注位置。
+
 ```
-pcm = SDADC 输入
+pcm = SDADC 输入（bsp_sdadc 采集）
   ↓
-[1] mute_flag 处理（按键/启动）
+[0] mute_flag 处理（启动丢帧 / 按键 mute）            mic_proc.c:280-293
+    ├─ bsp_sdadc_discard_proc() 启动期强制静音         :281
+    ├─ #if WIRELESS_MIC_KEY_PRESS_MUTE_EN 按键抬起静音 :284-289
+    └─ mute_flag 时 memset 清零                        :291-293
   ↓
-[2] 32k → 48k 重采样（如果 WIRELESS_MIC_32K_EN）
+─── 以下全部在 if(sys_cb.mic_alg_en) 门禁内（:295）───
   ↓
-[3] AINS4_32K 降噪（如果）
+[1] AINS4_32K 降噪        #if WIRELESS_MIC_AINS4_32K_EN   :297-298
   ↓
-[4] EQ/DRC（loc_mic_pacc_process）
+[2] ECHO 混响(@32k)      #if ECHO_EN && WIRELESS_MIC_32K_EN  :301-302   ← 仅 32k 模式
   ↓
-[5] DNR_FRE 频域降噪
+[3] SRC 32k→48k 重采样    #if WIRELESS_MIC_32K_EN          :305-307   ← 32k 模式才有
   ↓
-[6] ECHO 混响
+[4] MAX_POWER_DETECT 麦能量检测  #if WIRELESS_MAX_POWER_DETECT_EN :310-311
   ↓
-[7] MAGIC 魔音
+[5] EQ/DRC（mic_eq_drc_audio_input → loc_mic_pacc_process，含 Soft Gain）
+                          #if WIRELESS_MIC_EQ_DRC_EN       :314-315
   ↓
-[8] ROOM_REVERB 房间混响
+[6] DNR_FRE 频域降噪     #if WIRELESS_MIC_DNR_FRE_EN      :318-319
   ↓
-[9] AGC 自动增益
+[7] ECHO 混响(@!32k)     #if ECHO_EN && !WIRELESS_MIC_32K_EN :322-323  ← 仅非 32k 模式
   ↓
-[10] LC3S 编码
+[8] MAGIC 魔音           #if WIRELESS_MIC_MAGIC_EN        :326-327
   ↓
-wireless_d2a_put_tx_frame()  →  TX 缓冲
+[9] ROBOTIZATION 机器人音效  #if WIRELESS_MIC_ROBOTIZATION_EN :330-331
+  ↓
+[10] ROOM_REVERB 房间混响 #if WIRELESS_MIC_ROOM_REVERB_EN :334-335
+  ↓
+[11] AGC 自动增益        #if WIRELESS_MIC_AGC_EN          :338-339
+  ↓
+[12] DUMP_HUART 调试打印  #if DUMP_HUART（仅调试）         :342-343
+  ↓
+─── 退出 mic_alg_en 门禁 ───
+  ↓
+[13] WARNING 提示音混入   #if WARNING_MIC_MIX_WAV_PLAY_EN  :346-351
+  ↓
+[14] LC3S 编码           #if CODEC_LC3S                   :358-359
+  ↓
+[15] wireless_d2a_put_tx_frame() → TX 缓冲                :363
+  ↓
+[16] wl_play_sync_tick1() 发送节拍同步                   :366
+  ↓
+[17] DAC 侦听输出         #if WIRELESS_MIC_DAC_OUT_EN      :368-375
 ```
 
-> 注意：`WIRELESS_MIC_32K_EN` 开启时 ECHO 会先于重采样（第 302 行），不开时 ECHO 在重采样之后（第 323 行）。这是因为 ECHO 模块原本按 32k 设计。
+> 注意 ECHO 的两处位置：`WIRELESS_MIC_32K_EN` 开启时 ECHO 先于重采样（`:302`），因为 ECHO 模块按 32k 设计，先在 32k 域处理再升采样；不开 32k 时 ECHO 在 EQ/DRC 之后（`:323`）。两者互斥，同一镜像最多编译其中一处。
+>
+> ⚠️ `mic_alg_en` 门禁：步骤 [1]–[12] 全部包在 `if(sys_cb.mic_alg_en)`（`:295`）内。该标志在连接初始化 `mic_emit_init()` 返回后才置 1（`wireless_proc.c:110`），断连时先置 0（`wireless_proc.c:178`）。因此未连接或断连瞬间所有算法被旁路，PCM 直送编码器。
+>
+> 当前默认配置（`config_ab5766_le_mic.h:96-118`）实际编译节点：[5] EQ/DRC（含 Soft Gain）、[14] LC3S、[15] put_tx_frame、[17] DAC_OUT；其余节点宏=0 不编译。
 
 ### 9.2 软件增益
 
@@ -785,12 +839,12 @@ flowchart TD
     scan -->|无绑定| scn[ble_scan_set_enable]
     proc_f --> other[wireless_mic_proc + func_process<br/>更新 LED + 喂狗]
     loop --> msg[msg_dequeue 派发到 func_mic_emit_message<br/>msg_mic_emit.c:5]
-    bond --> conn[wireless_emit_notice CONNECTED<br/>wireless_proc.c:98-151]
+    bond --> conn[wireless_emit_notice CONNECTED<br/>仅 connected_sta==0 第一路连接时 · wireless_proc.c:98-111]
     scn --> conn
     conn --> c1[sys_clk_req 160M]
-    conn --> c2[mic_emit_init · mic_proc.c:597]
-    c2 --> alg[初始化所有算法 EQ/DRC/LC3S/DAC]
-    c2 --> c3[sys_cb.mic_alg_en = 1]
+    conn --> c2[mic_emit_init · mic_proc.c:597<br/>mic_emit_alg_init 为空函数<br/>按 #if 宏逐项初始化开启项]
+    c2 --> alg[仅初始化宏=1 的项<br/>SOFT_GAIN/EQ_DRC/LC3S_enc/DAC_OUT<br/>ECHO/MAGIC/AGC/ROOM_REVERB 等宏=0 不编译]
+    c2 --> c3[init 返回后<br/>sys_cb.mic_alg_en = 1 · wireless_proc.c:110]
     alg --> stream[启动音频流]
     stream --> t1[每 2.5ms: SDADC &rarr; mic_enc_proc_cb<br/>mic_proc.c:277]
     t1 --> t2[LC3S 编码 &rarr; wireless_d2a_put_tx_frame<br/>wireless_txrx_single.c:308]

@@ -54,7 +54,7 @@ flowchart TD
 | `xcfg_cb.wireless_mic_emit_en` 为真 | `cfg_wireless_role = false` → **发射端**                     |
 | 两者都关                            | 默认 `false` → **发射端**                                    |
 
-`xcfg_cb` 由 `bsp_param_init()` 从 Flash 加载（`bsp/bsp_sys.c:243`），其中 `wireless_adapter_en` / `wireless_mic_emit_en` 是产测写入的标志位，**用于同一份固件烧到不同板子上时自动切换角色**。
+`xcfg_cb` 由 `xcfg_init()` 从 Flash 加载（`bsp/bsp_sys.c:202`，即 `if (!xcfg_init(&xcfg_cb, sizeof(xcfg_cb)))`），其中 `wireless_adapter_en` / `wireless_mic_emit_en` 是产测写入的标志位，**用于同一份固件烧到不同板子上时自动切换角色**。（注意：`bsp_param_init()` 在 `bsp_sys.c:243` 被调用，但它仅执行 `cm_init()` 初始化参数区管理器，`bsp/bsp_param.c:15-20`，并不加载 `xcfg_cb`。）
 
 ### 1.2 角色判定决策图
 
@@ -77,7 +77,7 @@ flowchart LR
 ### 1.3 接收端功能入口
 
 ```
-func_run()  [functions/func.c:148-177]
+func_run()  [functions/func.c:134-178]
     └─ switch(func_cb.sta)
         case FUNC_ADAPTER:
             func_adapter()  [functions/func_adapter.c:222-239]
@@ -175,7 +175,7 @@ func_run()  [functions/func.c:148-177]
 | `led_init()`                           | 224      | LED 初始化                                                   |
 | `power_on_check()`                     | 238      | 按住 PWR 才开机的逻辑                                        |
 | `sys_clk_set(SYS_CLK_SEL)`             | 241      | 切主频（默认 24M）                                           |
-| `bsp_param_init()`                     | 243      | 加载音量、绑定等参数                                         |
+| `bsp_param_init()`                     | 243      | 初始化参数区管理器（`cm_init()`，仅准备读写接口，不加载 `xcfg_cb`，见 `bsp/bsp_param.c:15-20`） |
 | `xosc_init()`                          | 245      | 晶振校准                                                     |
 | `sys_set_tmr_enable(1, 1)`             | 248      | 启动 5ms / 1ms 定时器                                        |
 
@@ -236,14 +236,15 @@ void func_run(void) {
 
 ### 4.1 函数一览
 
-`functions/func_adapter.c:36-239` 提供了 7 个函数：
+`functions/func_adapter.c:36-239` 定义了 9 个函数（`ble_set_con_id()` 与 `wireless_con_role()` 仅在 `WIRELESS_CON_PAIR_MODE=1` 时编译；`usb_detect()` 仅在 `ADAPTER_USB_MIC_RX_EN=1` 时编译）。当前默认配置（`PAIR_MODE=0`、`USB_MIC_RX_EN=1`）下实际编译 7 个：
 
 | 行号    | 函数                                       | 作用                                                         |
 | ------- | ------------------------------------------ | ------------------------------------------------------------ |
-| 36-53   | `usb_detect()`                             | USB 设备插拔检测（`ADAPTER_USB_MIC_RX_EN`）                  |
+| 36-53   | `usb_detect()`                             | USB 设备插拔检测（`ADAPTER_USB_MIC_RX_EN=1` 时编译）         |
 | 57-69   | `func_adapter_init()`                      | 初始化 adapter 状态字段：`init_state = ADAPTER_STA_INIT_IDLE`，LED 设为"待连接" |
 | 71-121  | `func_adapter_process_do()`                | **核心状态机**：处理 adv 切换、连接/断开反馈                 |
-| 123-162 | `ble_set_con_id()` / `wireless_con_role()` | 主副麦切换（仅 `WIRELESS_CON_PAIR_MODE`）                    |
+| 125-131 | `ble_set_con_id()`                         | 切换广播 con_id（仅 `WIRELESS_CON_PAIR_MODE=1` 时编译）      |
+| 133-162 | `wireless_con_role()`                      | 主副麦切换（仅 `WIRELESS_CON_PAIR_MODE=1` 时编译）           |
 | 165-202 | `func_adapter_process()`                   | 每次循环调用：状态机 + 无线协议栈 + 公共 process             |
 | 204-213 | `func_adapter_enter()`                     | 进态：清消息队列、初始化、调用 `bsp_ble_init()`              |
 | 215-220 | `func_adapter_exit()`                      | 退态：关蓝牙                                                 |
@@ -403,12 +404,19 @@ flowchart LR
     TX((蓝牙 RX<br/>远程 mic_emit)) --> get_rx[wireless_d2a_get_rx_frame<br/>wireless_txrx_single.c:266]
     get_rx --> kick[kick_dec_prio_trans<br/>推到工作线程]
     kick --> dec_cb[mic_dec_prco_cb<br/>mic_proc.c:550]
-    dec_cb --> bfi{bfi 错包?}
-    bfi -->|yes| skip[跳过解码]
+    dec_cb --> gate{mic_alg_en 门禁<br/>mic_proc.c:562}
+    gate -->|未使能| mute[memset 静音 :583]
+    gate -->|已使能| conn_chk{该 idx 已连接? :564}
+    conn_chk -->|否| pass
+    conn_chk -->|是| getf[wireless_d2a_get_rx_frame<br/>mic_proc.c:565]
+    getf --> bfi{bfi 错包? :567}
+    bfi -->|yes| skip[跳过 lc3s_dec]
     bfi -->|no| decode[lc3s_dec<br/>mic_proc.c:575]
-    decode --> plc[plc_soft_process<br/>plc_soft.c:11]
+    decode --> plc[plc_soft_process 总是执行<br/>plc_soft.c:11 / mic_proc.c:579]
     skip --> plc
-    plc --> pcm_out[mic_dec_pcm_out<br/>mic_proc.c:504]
+    mute --> pass[继续 mic_dec_pcm_out]
+    plc --> pass
+    pass --> pcm_out[mic_dec_pcm_out<br/>mic_proc.c:586]
     pcm_out --> mix{mix_drc?}
     mix -->|yes| mixdrc[mix_drc_audio_input<br/>mic_eq_drc.c:62]
     mix -->|no| avg[简单平均 pcm0/2+pcm1/2]
@@ -422,7 +430,7 @@ flowchart LR
     classDef proc fill:#fff3cd,stroke:#ffc107
     classDef out fill:#d1e7dd,stroke:#198754
     class TX,get_rx,kick io
-    class dec_cb,bfi,decode,plc,skip,pcm_out,mix,mixdrc,avg,dac proc
+    class dec_cb,gate,mute,conn_chk,getf,bfi,decode,plc,skip,pass,pcm_out,mix,mixdrc,avg,dac proc
     class dac0_out,usb_mic,sddac,uac out
 ```
 
@@ -446,7 +454,7 @@ BLE 驱动 ISR` → `wireless_d2a_set_rxpkt_cb` → `wireless_d2a_set_rxdec_cb` 
 `adapter_init()`（`modules/wireless/mic_proc.c:700-734`）按配置开关依次初始化：
 
 ```c
-adapter_alg_init();                                          // 702  -> plc_soft_init x 2
+adapter_alg_init();                                          // 703  -> plc_soft_init x 2 (mic_proc.c:82-86)
 memset(&mic_dec, 0x00, sizeof(mic_dec));                     // 705
 #if WIRELESS_CON_LINK_NB > 1 && !WIRELESS_CON_COMB_BUF_EN
     // 算 frag_samples[0/1] (双链路拆半帧)                   // 706-710
@@ -467,6 +475,11 @@ wireless_host_ch_class_set();                                // 732 -> 设置频
 ```
 
 > ⚠️ 注意：`adapter_init` 完全在 `wireless_emit_notice(BT_NOTICE_WIRELESS_CONNECTED)` 第一次连接成功时调用（`wireless_proc.c:104-105`），**不是**在 `func_adapter_enter()` 里——后者只跑 `bsp_ble_init()` 初始化 RX 缓冲。这里区别于发射端，发射端 `mic_emit_init` 也是在连接成功时调用，以节约功耗。
+>
+> ⚠️ **关键：连接后并非"初始化所有算法"。** 逐条核对 `modules/wireless/mic_proc.c`：
+> 1. `adapter_alg_init()`（`mic_proc.c:82-86`）**只调用** `plc_soft_init(0, ...)` 与 `plc_soft_init(1, ...)`，即仅初始化**两路 PLC**，不涉及 DAC/MIX_DRC/LC3S。
+> 2. 其余初始化（`lc3s_dec_init`、`mix_drc_init`、`huart_audio_output_init`、`dac0_out_init`）全部以 `#if` 宏条件编译，宏=0 不编译、宏=1 才编入。当前默认配置（`config_ab5766_le_mic.h:120-133`）实际编译项：`lc3s_dec_init`（`CODEC_LC3S`）、`mix_drc_init`（`ADAPTER_MIX_DRC_EN=1`）、`dac0_out_init`（`ADAPTER_DAC_OUTPUT_EN=1`）；`huart_audio_output_init`（`ADAPTER_HUART_AUDIO_OUTPUT_EN=0`）不编译。
+> 3. **门控**：整个 `adapter_init()` 仅在 `connected_sta == 0`（0→1 第一路连接）时运行一次（`wireless_proc.c:102`），第二路连接不重复 init；`sys_cb.mic_alg_en = 1` 在 `adapter_init()` 返回**之后**才置位（`wireless_proc.c:110`），即 init 期间算法尚未使能。
 
 #### 6.3.2 接收端清理
 
@@ -489,72 +502,86 @@ if(con_sta == 0) {                 // 全断
 
 #### 6.3.3 接收处理回调（**核心解码链路**）
 
-`mic_dec_prco_cb()`（`modules/wireless/mic_proc.c:550-594`）：
+`mic_dec_prco_cb()`（`modules/wireless/mic_proc.c:550-594`）。注意 PLC 调用时序：**不论本次 `bfi` 是否为真，`plc_soft_process()` 都会执行**（`:579`，在 `if(!bfi){ lc3s_dec }` 之外），用 `last_bfi[idx]||bfi` 决定是否走丢包插值分支。源码与下方清单逐行对应：
 
 ```c
 void mic_dec_prco_cb(u8 idx) {
+#if WARNING_TONE_EN
+    if(res_music_playing_state_get()) return;                  // 552-556 提示音期间跳过解码
+#endif
     s16 *pcm = (s16 *)&mic_dec.pcm[idx].buf;
     u32 samples = WIRELESS_MIC_SAMPLES_SELECT;
 
-    if (sys_cb.mic_alg_en) {
+    if (sys_cb.mic_alg_en) {                                   // 562 算法门禁
         u8 con_status = ble_con_get_status();
-        if (con_status & BIT(idx)) {
-            bool bfi = wireless_d2a_get_rx_frame(idx, mic_dec.frame, WIRELESS_MIC_FRAME_SIZE);  // 565
+        if (con_status & BIT(idx)) {                           // 564 该链路已连接
+            bool bfi = wireless_d2a_get_rx_frame(idx, mic_dec.frame, WIRELESS_MIC_FRAME_SIZE);  // 565 取帧
 
-            if (!bfi) {
+            if (!bfi) {                                         // 567 仅好包才解码
                 #if WIRELESS_CON_CODEC_SEL == CODEC_LC3S
-                    lc3s_dec(mic_dec.frame, pcm, samples, idx);                                // 575
+                    lc3s_dec(mic_dec.frame, pcm, samples, idx); // 575
                 #endif
             }
-            plc_soft_process(pcm, samples, mic_dec.last_bfi[idx] || bfi, idx);                  // 579
-            mic_dec.last_bfi[idx] = bfi;
+            plc_soft_process(pcm, samples, mic_dec.last_bfi[idx] || bfi, idx);  // 579 总是执行 PLC
+            mic_dec.last_bfi[idx] = bfi;                        // 580
         }
     } else {
-        memset(pcm, 0x00, samples * 2);
+        memset(pcm, 0x00, samples * 2);                        // 583 未使能算法时静音
     }
 
-    mic_dec_pcm_out(idx);                                                                       // 586
+    mic_dec_pcm_out(idx);                                      // 586 输出/混音
 
-    if (idx == mic_dec.sync_idx) {
-        mic_dec_dac_sync_proc();                                                                 // 590  -> 调速
+    if (idx == mic_dec.sync_idx) {                             // 588 仅同步链路调速
+        mic_dec_dac_sync_proc();                               // 590 DAC 调速，避免长期收发速率漂移
     }
 }
 ```
+
+> ⚠️ 关键时序：`lc3s_dec` 只在 `!bfi`（好包）时调用；`plc_soft_process` 在 `if(!bfi)` 块**之外**，故**每一帧都执行** PLC（好包走透传/平滑分支，坏包走丢包插值分支，由 `last_bfi[idx]||bfi` 标志区分）。这是与"坏包才走 PLC"直觉相反的实现在线，务必在文档/排查中保留。
 
 #### 6.3.4 解码输出双链路处理
 
-`mic_dec_pcm_out()`（`mic_proc.c:504-546`，单包模式）：
+`mic_dec_pcm_out()`（`mic_proc.c:504-546`，非组合缓冲模式）。该函数有两种条件分支：单链路直接输出；双链路（当前配置 `WIRELESS_CON_LINK_NB==2`）按 frag0/frag1 拆半帧，并对单边断连做补偿。下方清单与源码逐行对应：
 
 ```c
-void mic_dec_pcm_out(u8 idx) {
-    #if (WIRELESS_CON_LINK_NB == 1)
-        // 单链路：直接输出
-        #if ADAPTER_USB_MIC_RX_EN
-            usb_mic_in_audio_input(pcm, samples, 0, 0);                                          // 509
-        #endif
-        #if ADAPTER_DAC_OUTPUT_EN
-            dac0_out_audio_input(pcm, samples, 0);                                              // 512
-        #endif
-    #else
-        // 双链路（前/后半帧拆分）
-        if (idx == 0) {
-            // 通道 1 前半帧 + 通道 2 后半帧
-            mic_dec_pcm_out_frag0(idx, 0);                                                       // 521
-            if (con_status & ~BIT(idx)) == 0) {  // 通道 2 未连
-                mic_dec_pcm_out_frag1(idx, 0);                                                   // 528
-            }
-        } else {
-            // 通道 2 解码完，再输出 frag0
-            if (mic_dec.frag0_done_flag) {
-                mic_dec_pcm_out_frag1(idx, 0);                                                   // 534
-            }
-            if ((con_status & ~BIT(idx)) == 0) {  // 通道 1 未连
-                mic_dec_pcm_out_frag0(idx, 0);                                                   // 541
-            }
-        }
+static void mic_dec_pcm_out(u8 idx) {
+#if (WIRELESS_CON_LINK_NB == 1)
+    // 单链路：直接输出整帧到 USB/DAC
+    #if ADAPTER_USB_MIC_RX_EN
+        usb_mic_in_audio_input((u8 *)(&mic_dec.pcm[0].buf[0]), WIRELESS_MIC_SAMPLES_SELECT, 0, 0);  // 509
     #endif
+    #if ADAPTER_DAC_OUTPUT_EN
+        dac0_out_audio_input((u8 *)(&mic_dec.pcm[0].buf[0]), WIRELESS_MIC_SAMPLES_SELECT, 0);       // 512
+    #endif
+#else
+    u8 con_status;
+    u8 dec_flag = 0;
+    if (idx == 0) {
+        if (mic_dec.frag0_done_flag == 0) {
+            mic_dec_pcm_out_frag0(idx, dec_flag);   // 521 推通道1前半帧+通道2后半帧
+            mic_dec.frag0_done_flag = 1;            // 522
+        }
+        con_status = ble_con_get_status();         // 526
+        if ((con_status & ~BIT(idx)) == 0) {        // 527 通道2未连 → 补 frag1
+            mic_dec_pcm_out_frag1(idx, 0);          // 528
+            mic_dec.frag0_done_flag = 0;            // 529
+        }
+    } else {
+        if (mic_dec.frag0_done_flag) {             // 533 通道1已先完成 frag0
+            mic_dec_pcm_out_frag1(idx, dec_flag);   // 534 推通道1后半帧+通道2前半帧
+            mic_dec.frag0_done_flag = 0;            // 535
+        }
+        con_status = ble_con_get_status();         // 539
+        if ((con_status & ~BIT(idx)) == 0) {        // 540 通道1未连 → 补 frag0
+            mic_dec_pcm_out_frag0(idx, 0);          // 541
+            mic_dec.frag0_done_flag = 1;            // 542
+        }
+    }
+#endif
 }
 ```
+
+> 说明：`frag0` = 通道0前半帧 + 通道1后半帧（`mic_proc.c:480-488`），`frag1` = 通道0后半帧 + 通道1前半帧（`mic_proc.c:492-501`），二者按 `frag_samples[0/1]` 切分一帧 120 样点。`frag_samples` 在 `adapter_init()` 计算（`mic_proc.c:706-710`），仅当 `LINK_NB>1 && !COMB_BUF_EN` 时编译。
 
 COMB_BUF 模式（`mic_proc.c:393-425`）：两条链路拼成完整双声道，然后整体送 `mix_drc_audio_input` / `callback`。
 
@@ -631,7 +658,7 @@ LC3S 帧大小：见 `WIRELESS_MIC_FRAME_SIZE`（`config_ab5766_le_mic.h:80`，�
 
 | 名称                        | 值                                                           | 含义             |
 | --------------------------- | ------------------------------------------------------------ | ---------------- |
-| `cfg_wireless_con_interval` | `WIRELESS_CON_INTERVAL * LINK_NB`（`config_ab5766_le_mic.h` 默认 2×2=4，单位 1.25ms = 5ms） | 连接间隔         |
+| `cfg_wireless_con_interval` | `WIRELESS_CON_INTERVAL * WIRELESS_CON_LINK_NB`（`wireless.c:13`）。`WIRELESS_CON_INTERVAL` 定义在 `config_extra.h`（`VERS=7`+`TX_INTERVAL=4` 命中 `#else` 分支 → 60），`WIRELESS_CON_LINK_NB=2`（`config_ab5766_le_mic.h:76`），故 60×2=120，单位 1.25ms = **150ms** | 连接间隔         |
 | `cfg_wireless_tx_interval`  | `WIRELESS_MIC_TX_INTERVAL`（默认 4，单位 1.25ms = 5ms）      | 音频发送周期     |
 | `cfg_wireless_tx_retry`     | `WIRELESS_MIC_RETRY_NB`（默认 3）                            | 单包重传次数     |
 | `cfg_wireless_d2a_tx_size`  | `MIC_TX_BUFFER_SIZE`                                         | 发射 buffer 大小 |
@@ -861,19 +888,44 @@ static struct cmd_tag txcmd[WIRELESS_CON_LINK_NB];   // 每链路一个
 
 ### 10.1 接收端算法数据流
 
+以下顺序严格对应 `mic_dec_prco_cb()`（`mic_proc.c:550-594`）与 `mic_dec_pcm_out*()`（`mic_proc.c:453-546`）。行号为 `mic_proc.c` 实际行号，`#if` 宏=0 的节点在当前配置下不编译、不执行。
+
 ```
-[LC3S 解码] pcm = full sample
+每路收到一包 RX 帧 → kick_dec_prio_trans(idx) → 工作线程 mic_dec_prco_cb(idx)
   ↓
-[PLC 处理] plc_soft_process(pcm, samples, bfi, idx)
+[0] WARNING_TONE 提示音播放中? → 直接 return        #if WARNING_TONE_EN  :552-556
   ↓
-[输出到 obuf] mic_dec_pcm_out_samples / mic_dec_pcm_out
+[1] mic_alg_en 门禁检查                              :562
+    ├─ 未使能 → memset 静音 → 跳过 [2][3][4]，仍走 [5]  :583
+    └─ 已使能 → 继续
   ↓
-[混音] mix_drc_audio_input(pcm0, pcm1, obuf, samples)  // ADAPTER_MIX_DRC_EN
+[2] 该 idx 已连接? (con_status & BIT(idx))           :564
+    └─ 未连 → 跳过 [3][4]（不取帧/不解码/不 PLC），仍走 [5] 输出（单边断连补偿）
   ↓
-[DAC] dac0_out_audio_input(obuf, samples, 0)            // ADAPTER_DAC_OUTPUT_EN
+[3] wireless_d2a_get_rx_frame → bfi                  :565
+    ├─ !bfi 好包 → lc3s_dec                          :567-576
+    └─  bfi 坏包 → 跳过解码
   ↓
-[USB Mic] usb_mic_in_audio_input(obuf, samples, 0, 0)   // ADAPTER_USB_MIC_RX_EN
+[4] plc_soft_process(pcm, samples, last_bfi||bfi, idx) :579  ← 每帧都执行(在 if(!bfi) 外)
+    + mic_dec.last_bfi[idx] = bfi                      :580
+  ↓
+[5] mic_dec_pcm_out(idx) → 输出/混音                  :586
+    ├─ LINK_NB==1: 直接 dac0_out/usb_mic            :506-513
+    └─ LINK_NB==2: frag0/frag1 拆半帧 + 单边断连补偿  :518-544
+        └─ mic_dec_pcm_out_samples(pcm0,pcm1,samples)  :453-477
+            ├─ mix_drc_audio_input(pcm0,pcm1,obuf,samples)  #if ADAPTER_MIX_DRC_EN  :457-458
+            ├─ 否则 obuf[i]=pcm0[i]/2+pcm1[i]/2             :460-462
+            ├─ dac0_out_audio_input(obuf+off, samples, 0)   #if ADAPTER_DAC_OUTPUT_EN :465-466
+            └─ obuf_off==120 时 usb_mic_in_audio_input(obuf) #if ADAPTER_USB_MIC_RX_EN :473-474
+  ↓
+[6] idx==sync_idx? mic_dec_dac_sync_proc() 调速       :588-590
 ```
+
+> ⚠️ 与发射端不同：接收端没有 `AINS4/ECHO/MAGIC/AGC/ROOM_REVERB/ROBOTIZATION/SOFT_GAIN` 等上行音效链，这些是发射端 `mic_enc_proc_cb` 专属。接收端算法链只有 **LC3S 解码 → PLC → 混音/MIX_DRC → DAC/USB** 四类节点，且全部受 `mic_alg_en` 门禁。
+>
+> ⚠️ `plc_soft_process` 每帧执行（不区分 bfi），由内部按 `last_bfi||bfi` 选透传/插值分支，不能写成"仅坏包走 PLC"。
+>
+> 当前默认配置（`config_ab5766_le_mic.h:120-133`）实际编译节点：[3] lc3s_dec（CODEC_LC3S）、[4] plc_soft_process（adapter_alg_init 内 plc_soft_init x2）、[5] mix_drc（ADAPTER_MIX_DRC_EN=1）、dac0_out（ADAPTER_DAC_OUTPUT_EN=1）、usb_mic（ADAPTER_USB_MIC_RX_EN=1）。
 
 ### 10.2 MIX_DRC（硬件 PACC）
 
@@ -912,23 +964,26 @@ adapter_reset(con_sta=0) → dac0_out_exit()            [mic_proc.c:746]
 
 ### 10.4 PLC 丢包隐藏
 
-`modules/voice/plc_soft.c`：
+`modules/voice/plc_soft.c`（仅 API 可见，核心 `plc_soft_process_do`/`plc_soft_init_do` 在预编译库）：
 
-- `plc_soft_init(idx, samples, sample_rate)`（行 19-53）：选 8K/16K 参数。
-- `plc_soft_process(pcm, samples, bfi, idx)`（行 11-16）：包丢失时插值。
-- `plc_soft_exit(idx)`（行 56-64）：关闭。
+- `plc_soft_init(idx, pkt_len, sample_rate)`（行 19-53）：按 `sample_rate` 选 8K/16K 参数集（`pitch_min/max`、`corrlen` 等），再调 `plc_soft_init_do(st, pkt_len)`。**注意**：`>=SAMPLE_RATE_16K` 反而选 8K 参数分支（`plc_soft.c:24-34`），这是源码原样逻辑，勿按常理改为 48K。
+- `plc_soft_process(int_data, samples, bfi, idx)`（行 11-16）：取 `&m_st[idx]`，调 `plc_soft_process_do(int_data, samples, bfi, st)`。`bfi` 由调用方传 `last_bfi[idx]||bfi`，**每帧都调**，内部按 bfi 选透传/插值分支。
+- `plc_soft_exit(idx)`（行 56-64）：`st->enable=false` + `delay_5ms(2)` + `plc_soft_init_do` 复位。
+- 预编译边界：`plc_soft_process_do`、`plc_soft_init_do` 的预测/基音估计/重叠相加实现不可见，不能臆测具体插值算法。
 
 接收端调用：
 
 ```
-adapter_init() → plc_soft_init(0,..) + plc_soft_init(1,..)   [mic_proc.c:84-85]
-mic_dec_prco_cb() → plc_soft_process(..., bfi, idx)          [mic_proc.c:579]
-adapter_reset() → plc_soft_exit(idx)                          [mic_proc.c:740]
+adapter_init() → adapter_alg_init() → plc_soft_init(0,..) + plc_soft_init(1,..)   [mic_proc.c:82-86]
+mic_dec_prco_cb() → plc_soft_process(pcm, samples, last_bfi[idx]||bfi, idx)      [mic_proc.c:579]
+adapter_reset() → plc_soft_exit(idx)                                              [mic_proc.c:740]
 ```
+
+> ⚠️ PLC 由 `adapter_alg_init()` 统一初始化两路（idx=0/1），是接收端唯一"无条件"（非 `#if` 宏）初始化的算法；其余算法（MIX_DRC/DAC/LC3S_dec）均 `#if` 条件编译。但 `plc_soft_process` 的**执行**仍受 `mic_alg_en` 门禁（`mic_proc.c:562`）与"该 idx 已连接"判断（`:564`）双重约束。
 
 ### 10.5 soft_gain（接收端不直接调用）
 
-`modules/audio/soft_gain.c` 默认在接收端代码里**不直接使用**——它由发射端在 `mic_enc_proc_cb` 中使用（`mic_proc.c:315` 内的算法链）。接收端只通过 `wireless_sync_param` 同步 soft_gain 等级给 mic 端。
+`modules/audio/soft_gain.c` 默认在接收端代码里**不直接使用**——它由发射端在 `mic_enc_proc_cb` 中使用（`mic_proc.c:315` 内的算法链，实现在 `mic_eq_drc_init()` 内 `mic_eq_drc.c:45` 调 `soft_gain_init`）。接收端只通过 `wireless_sync_param` 同步 soft_gain 等级给 mic 端。
 
 ### 10.6 LC3S 编码/解码
 
@@ -936,7 +991,7 @@ adapter_reset() → plc_soft_exit(idx)                          [mic_proc.c:740]
 
 ```c
 uint8_t cfg_lc3s_frame_len = WIRELESS_MIC_FRAME_SIZE;     // 25 字节
-uint8_t cfg_lc3s_bitrate = 80000;                          // 25字节/帧对应 80kbps
+uint32_t cfg_lc3s_bitrate = 80000;                         // 25字节/帧对应 80kbps
 ```
 
 实际编解码算法实现在库中。
@@ -962,7 +1017,7 @@ uint8_t cfg_lc3s_bitrate = 80000;                          // 25字节/帧对应
 | `txcmd[]`               | `modules/wireless/wireless_cmd.c:14`            | 私有命令发送队列                                         |
 | `wireless_sync_prarm`   | `modules/wireless/wireless_sync_param.c:4`      | 同步参数状态（接收端用）                                 |
 | `dac0_out_cfg`          | `modules/audio/dac0_out.c:10`                   | DAC0 输出状态                                            |
-| `aufifo0_cnt`           | `modules/audio/dac0_out.c:12`                   | DAC FIFO 计数（跨文件）                                  |
+| `aufifo0_cnt`           | `modules/audio/dac0_out.c:11`                   | DAC FIFO 计数（跨文件）                                  |
 
 ### 接收端特有的 `wireless_mic` 字段
 
@@ -1027,11 +1082,15 @@ flowchart TD
     proc_f --> proc6[wireless_dump_proc]
     loop --> msg[msg_dequeue 派发到 func_adapter_message<br/>msg_adapter.c:5]
     proc1 -.start_action.-> conn[wireless_emit_notice CONNECTED<br/>wireless_proc.c:98-150]
-    conn --> c1[sys_clk_req 160M]
-    conn --> c2[adapter_init · mic_proc.c:700]
-    conn --> c3[sys_cb.mic_alg_en = 1]
-    c2 --> alg[初始化所有算法 DAC/MIX_DRC/PLC/LC3S]
-    alg --> stream[启动音频流]
+    conn --> c1[sys_clk_req 160M · wireless_proc.c:103]
+    conn --> c2{connected_sta==0? 第一路门控<br/>wireless_proc.c:102]
+    c2 -->|是| ci[adapter_init · mic_proc.c:700]
+    c2 -->|否 第一路已初始化| skip[跳过初始化<br/>第二路不重复 init]
+    ci --> c3[sys_cb.mic_alg_en = 1 · wireless_proc.c:110]
+    skip --> c3
+    ci --> alg[adapter_alg_init 仅 PLC<br/>plc_soft_init x2 · mic_proc.c:82-86]
+    alg --> alg2[按 #if 宏逐项 init<br/>MIX_DRC/DAC/LC3S_dec 仅宏=1 编译]
+    alg2 --> stream[启动音频流]
     stream --> s1[每 1.25ms: wireless_d2a_set_rxpkt_cb<br/>wireless_txrx_single.c:256]
     s1 --> s2[每 5ms: wireless_d2a_set_rxdec_cb<br/>wireless_txrx_single.c:273]
     s2 --> s3[kick_dec_prio_trans &rarr; mic_dec_prco_cb<br/>mic_proc.c:550]
@@ -1042,7 +1101,7 @@ flowchart TD
     classDef out fill:#d1e7dd,stroke:#198754
     class boot,bsp,bspwork,fr,a,enter,enter1,enter2,e2a,e2b,loop,proc1,proc2,proc3,proc4,proc5,proc5a,proc6,msg sys
     class role,proc_f mid
-    class conn,c1,c2,c3,alg,stream,s1,s2,s3,s4,s5 out
+    class conn,c1,c2,ci,skip,c3,alg,alg2,stream,s1,s2,s3,s4,s5 out
 ```
 
 ### 13.2 发射端断开后接收端行为
@@ -1123,8 +1182,6 @@ flowchart TD
     P17 --> P18["退出 USB 设备"]
     P18 --> P19["清除 usb init flag"]
 ```
-
-### 13.5 接收端全局架构图（Layer View）
 
 ### 13.5 接收端全局架构图（Layer View）
 
