@@ -1252,76 +1252,111 @@ void sdadc0_cmd(SDADC_REG_TYPEDEF *sdadc, u8 en) {
 2. **回调函数**（事件驱动）：`sdadc_done_callback_set(...)`
 3. **消息队列**（异步通信）：`msg_queue` + `func_mic_emit_message`
 
-### 第 22 章 · 示例 A：新增一个按键 + 消息链路
+### 第 22 章 · 示例 A：新增一个按键 + 消息链路（实测成功案例）
 
-**目标**：实现"按 PP 键 3 次，触发 `MSG_TEST_X`"。
+**目标**：在 mic emit 发射端，实现「K1 长按后松手」触发 `MSG_TEST_X`，串口打印 `Test X triggered`。本章按实际板卡实测通过流程记录，包含一次真实踩坑与修复。
 
-#### 步骤 1：添加消息枚举
+> 选 K1 长按抬起的原因：当前开发板只有 `KEY_ID_PP`、`KEY_ID_K1`、`KEY_ID_K2` 三个有效按键；`KEY_ID_K2` 的「长按抬起」列已用于 `MSG_CHANGE_MAGIC`，故选 K1。事件列为 `KEY_LONG_UP`（长按后**松手**触发，索引 3），与 K2 的 MAGIC 一致。
+
+#### 步骤 1：添加消息枚举（关键：值必须 < 0x100）
 
 ```c
-// functions/msg.h  （找到合适位置添加）
-EVT_TEST_X,    // 新增
+// functions/msg.h
+// 按键消息表是 u8 数组，经 bsp_key.c 的 key_set_msg_tbl 按字节拷贝，
+// 再由 bsp_key_get_msg 按 u8 取值返回。因此经按键表分派的消息，
+// 其枚举值必须落在 0x00~0xff，否则写入/读取会被截断成低 8 位。
+// 放在 MSG_VOL_MUTE 之后（紧接 MSG_VOL_MUTE，自动取下一个值，远小于 0x100）。
+enum{
+    MSG_NO                  = 0,
+    ...
+    MSG_VOL_UP,
+    MSG_VOL_DOWN,
+    MSG_VOL_MUTE,
+    MSG_TEST_X,                     //实测新增消息，值 = 11，满足 < 0x100
+
+    MSG_SYS_1S = 0x700,
+    ...
+};
 ```
 
-#### 步骤 2：修改按键消息表
+#### 步骤 2：修改按键消息表（mic emit 非 K12 表）
 
 ```c
-// projects/microphone/port/port_key.c  // 找到合适位置修改
+// projects/microphone/port/port_key.c
+// 注意：项目未定义 WIRELESS_MIC_K12_KEY_EN，编译走 #else 的非 K12 表。
+// KEY_ID_K1 的「长按抬起」列（索引 3，KEY_LONG_UP）填 MSG_TEST_X。
+#if WIRELESS_MIC_K12_KEY_EN
+... // K12 表略
+#else
 const u8 mic_emit_key_msg_tbl[KEY_TBL_MAX_NB][KEY_MSG_MAX_IDX] = {
-    [KEY_ID_PP] = {
-        MSG_VOL_MUTE,    // 单击
-        MSG_NO,          // 长按
-        MSG_PWR_HOLD,    // HOLD
-        MSG_NO,          // 长按抬起
-        MSG_NO,          // 双击
-        MSG_NO,          // 三击
-        EVT_TEST_X,      // 四击（KEY_FOUR = 6）
-        MSG_NO,          // 五击
-    },
-    // ... 其它键
+        //单击,      长按下,  HOLD,    长按抬起,      双击,   三击    四击    五击
+    [KEY_ID_PP] ={MSG_VOL_MUTE, MSG_NO, MSG_PWR_HOLD, MSG_NO, MSG_NO, MSG_NO, MSG_NO, MSG_NO},
+    [KEY_ID_K1] ={MSG_VOL_UP,  MSG_NO, MSG_NO,      MSG_TEST_X, MSG_NO, MSG_NO, MSG_NO, MSG_NO},
+    [KEY_ID_K2] ={MSG_VOL_DOWN,MSG_NO, MSG_NO,      MSG_CHANGE_MAGIC, MSG_NO, MSG_NO, MSG_NO, MSG_NO},
+    [KEY_ID_K3] ={MSG_NO,      MSG_NO, MSG_NO,      MSG_NO, MSG_NO, MSG_NO, MSG_NO, MSG_NO},
 };
+#endif
 ```
 
 #### 步骤 3：处理消息
 
 ```c
 // functions/msg_mic_emit.c  // 在 func_mic_emit_message 中添加 case
-case EVT_TEST_X:
+case MSG_TEST_X:
     printf("Test X triggered\n");
-    soft_gain_down();        // 示例动作
     break;
 ```
 
 #### 步骤 4：构建并测试
 
 ```bash
-# 1. 打开 projects/microphone/app.cbp
-# 2. 编译
-# 3. 烧录
-# 4. 测试 - 按 PP 键 4 次，观察打印
+# 1. 用 Code::Blocks 打开 projects/microphone/app.cbp，构建 Debug 目标
+# 2. 烧录 Output/bin/app.dcf
+# 3. 测试 - 长按 K1 再松手，观察 UART 串口打印
 ```
+
+实测：长按 K1 后松手，UART 打印 `Test X triggered`，链路打通。
 
 ```mermaid
 flowchart LR
-    A[硬件按键 PP] --> B[bsp_io_key_init<br/>GPIO 扫描]
-    B --> C[bsp_key_scan<br/>消抖]
-    C --> D[port_key.c 查表<br/>PP 4 → MSG_TEST_X]
-    D --> E[msg_queue]
+    A[硬件按键 K1] --> B[bsp_key_scan<br/>ADC/IO 消抖]
+    B --> C[key_status_process<br/>识别 KEY_LONG_UP]
+    C --> D[port_key.c 查表<br/>K1 长按抬起 → MSG_TEST_X]
+    D --> E[msg_enqueue<br/>bsp_key.c:131]
     E --> F[func_mic_emit_message<br/>switch case]
-    F --> G[soft_gain_down]
-    G --> H[LED 状态更新]
+    F --> G[printf Test X triggered]
     classDef hw fill:#e2e3e5,stroke:#6c757d
     classDef bsp fill:#fff3cd,stroke:#ffc107
     classDef app fill:#cfe2ff,stroke:#0d6efd
-    class A,B,C,D hw
-    class E,F,G,H app
+    class A,B,C hw
+    class D,E,F,G app
 ```
+
+#### 实测踩坑：消息值 ≥ 0x100 被截断，长按抬起不打印
+
+最初把新增消息放在 `MSG_SYS_MAX = 0x7ff` 之后，命名为 `EVT_TEST_X`，结果长按抬起**完全不打印**，而同表里的 `MSG_VOL_MUTE`、`MSG_VOL_UP` 等都正常。
+
+**根因**：`EVT_TEST_X` 紧跟 `0x7ff`，枚举值 = `0x800`（2048），超出 `u8` 范围。
+
+链路断点逐层分析：
+
+1. [port_key.c](projects/microphone/port/port_key.c) 的 `mic_emit_key_msg_tbl` 元素类型是 `u8`。
+2. [bsp_key.c:40-53](bsp/bsp_key.c#L40-L53) `key_set_msg_tbl` 用 `memcpy` 按**字节**拷贝整表，`EVT_TEST_X(0x800)` 写入后只剩低 8 位 = `0x00`。
+3. [bsp_key.c:55-67](bsp/bsp_key.c#L55-L67) `bsp_key_get_msg` 从 `u8` 元素取值返回，得到的还是 `0x00`。
+4. [bsp_key.c:129-132](bsp/bsp_key.c#L129-L132) 仍执行 `msg_enqueue(0)`。
+5. [func_mic_emit.c:219-222](functions/func_mic_emit.c#L219-L222) `msg = msg_dequeue()` 得到 `MSG_NO`，`if (msg != MSG_NO)` 不成立 → `func_mic_emit_message` **根本没被调用**，所以不打印。
+
+而 `MSG_VOL_MUTE`(10)、`MSG_VOL_UP`(8) 等都 < 0x100，放 `u8` 表不丢值，因此正常。
+
+**修复**：把测试消息挪到 `MSG_VOL_MUTE` 之后（值 = 11，满足 `< 0x100`），改名 `MSG_TEST_X`，并删除原来位于 `0x800` 的 `EVT_TEST_X`。三处同步：`msg.h` 枚举、`port_key.c` 按键表、`msg_mic_emit.c` case。
 
 **易错点**：
 
+- **经按键表分派的消息，枚举值必须 `< 0x100`**——这是本次踩坑的核心，`port_key.c` 表是 `u8`，`bsp_key.c` 按字节拷贝/读取。放在 `MSG_SYS_MAX = 0x7ff` 之后的 `EVT_*` 不满足此条件，不能进按键表。
 - `port_key.c` 的 `KEY_MSG_MAX_IDX` 必须覆盖所有事件类型
 - `msg.h` 枚举不能重复
 - 按键消息表内的 `MSG_*` 必须在 `functions/msg.h` 中定义
+- 注意当前板卡走非 K12 按键表（`WIRELESS_MIC_K12_KEY_EN` 未定义），且只有 PP/K1/K2 三个有效键，无 K3
 
 ### 第 23 章 · 示例 B：新增调试打印
 
