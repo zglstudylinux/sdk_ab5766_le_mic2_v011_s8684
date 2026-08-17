@@ -72,7 +72,7 @@
         <add key="charge_trickle_curr" value="20mA" />
         <add key="charge_stop_time" value="3" />
         <add key="charge_dc_in_rst" value="False" />
-        <add key="mic_dig_gain" value="26" />
+        <add key="mic_dig_gain" value="36" />
         <add key="pwron_press_time" value="3" />
         <add key="pwroff_press_time" value="3" />
         <add key="double_key_time" value="5" />

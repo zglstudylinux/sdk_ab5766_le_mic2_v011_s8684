@@ -160,6 +160,9 @@ SECTIONS
         __buf_start_ains4_32k = .;
         *(.buf.ains4_32k*)
         __buf_end_ains4_32k = .;
+         __buf_start_mic_effect = .;
+        *(.buf.mic_effect*)
+         __buf_end_mic_effect = .;
         __buf_start_esbc_enc = .;
         *(.buf.esbc_enc)
         __buf_end_esbc_enc = .;

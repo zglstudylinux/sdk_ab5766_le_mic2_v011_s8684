@@ -96,7 +96,7 @@
 
 //设备端算法配置
 #define WIRELESS_MIC_SOFT_GAIN_EN               1               //发射端是否开启 带保护的数字增益功能
-#define WIRELESS_MIC_EQ_DRC_EN                  0               //发射端是否开启EQ_DRC功能
+#define WIRELESS_MIC_EQ_DRC_EN                  1               //发射端是否开启EQ_DRC功能
 #define WIRELESS_MIC_EQ_DRC_DELAY               WIRELESS_MIC_EQ_DRC_EN*200//EQ_DRC运算时间
 #define WIRELESS_MIC_ECHO_EN                    0               //发射端是否开启 ECHO音效
 #define WIRELESS_MIC_ECHO_DELAY                 WIRELESS_MIC_ECHO_EN*200//ECHO运算时间
