@@ -289,6 +289,66 @@ Flash LMA 链验证（有内容的段）：
 
 `.code_test` 当前 size=`0x0`（产测 DUT 功能没编进来），所以它“占”的 LMA `0x100064ec` 实际是空的，`.flash` 紧随其后。
 
+### 6.4 `AT(...)`：源码里的 section 名是怎么来的
+
+前面各 section 里装的“输入 section”（如 `.com_text.sdadc.isr`、`.text.mic_emit.proc`、`.usbdev.com.detect`），都不是编译器自动命名的，而是源码里用 `AT(...)` 宏**手动指定**的。
+
+**宏定义**在 [header/macro.h](../../header/macro.h) 第 8–9 行：
+
+```c
+#define STR(x)                  #x
+#define AT(x)                   __attribute__((section(STR(x))))
+```
+
+- `STR(x)` 用 `#` 把参数字符串化，所以 `AT(.com_text.sdadc.isr)` 被展开成 `__attribute__((section(".com_text.sdadc.isr")))`。
+- 这个 attribute 告诉 GCC：把这个函数/变量放进 ELF 输入段，段名就是字符串 `".com_text.sdadc.isr"`。
+- 链接时，[ram.ld](../../projects/microphone/ram.ld) 里的 `*(.com_text*)` 这种“输入段收集模式”把它收进对应输出段（这里是 `.code_comm`）。
+
+**完整链路**：
+
+```mermaid
+flowchart LR
+    A["源码: AT(.com_text.sdadc.isr)\nvoid sdadc_isr_cb(void)"] --> B["GCC attribute\nsection .com_text.sdadc.isr"]
+    B --> C["bsp_sdadc.o 里生成\n输入段 .com_text.sdadc.isr"]
+    C --> D["ram.ld: *(.com_text*)\n收进 .code_comm"]
+    D --> E["map.txt 显示:\n.com_text.sdadc.isr @0x10c.."]
+```
+
+**所以“固定模板”不是编译器规定，而是本仓库的一套命名约定**，由 [ram.ld](../../projects/microphone/ram.ld) 的 `*(...)` 收集列表来落实。看 `AT(...)` 的**第一个点分字段**（不是看是否含 `com` 子串）就能判断它会落到哪个区：
+
+| `AT(...)` 第一字段 / 模式 | 含义 | ram.ld 收集者 | 落到输出段 | 所在内存 | NOLOAD | 例子（map 可见符号） |
+|---|---|---|---|---|---|---|
+| `.com_text.*` / `.bcom_text.*` / `.com_rodata.*` / `.bcom_rodata.*` | **公共代码/常量**，两角色都要用 | `.code_comm`：`*(.com_text*)` 等 | `.code_comm` | comm RAM（AT>flash） | 否 | `.com_text.sdadc.isr`（`sdadc_isr_cb`）、`.com_text.ble.isr.con`、`.com_text.timer`、`.vector` |
+| `.text.adapter.proc*` / `.text.plc_proc*` / `.rodata.plc*` / `.text.lc3_dec*` / `.rodata.lc3_dec*` / `.usbdev.com*` / `.text.mic_mix_proc*` | **Adapter 角色热路径** | `.code_adapter`：`*(.text.adapter.proc*)` 等 | `.code_adapter` | comm_adapter RAM（AT>flash） | 否 | `.text.adapter.proc`（`mic_dec_*`）、`.text.plc_proc*`（`plc_soft_process`）、`.usbdev.com.detect`（`usb_detect`）、`.text.mic_mix_proc`（`mix_pacc_process`） |
+| `.text.mic_emit.proc*` / `.text.lc3_enc*` / `.rodata.lc3_enc*` | **Emit 角色热路径** | `.code_emit`：`*(.text.mic_emit.proc*)` 等 | `.code_emit` | comm_emit RAM（AT>flash） | 否 | `.text.mic_emit.proc.sdadc`（`bsp_sdadc_kick`）、`.text.mic_emit.proc.bt_pll`、`.text.lc3_enc*`（`m_lc3s_enc`） |
+| `.buf.adapter.proc*` / `.buf.lc3_dec*` / `.buf.plc_buf*` / `.buf.mic_mix*` | **Adapter buffer** | `.data_adapter`：`*(.buf.adapter.proc*)` 等 | `.data_adapter` | comm_adapter RAM | **是** | `.buf.adapter.proc`（`mic_dec`）、`.buf.plc_buf`、`.buf.mic_mix.pacc`（`mix_pacc`） |
+| `.buf.lc3_enc*` / `.buf.mic_effect*` / `.buf.sdadc` / `.buf.mic_emit.proc*` | **Emit buffer** | `.data_emit`：`*(.buf.lc3_enc*)` 等 | `.data_emit` | comm_emit RAM | **是** | `.buf.lc3_enc`、`.buf.mic_effect`（`loc_mic_eq`）、`.buf.sdadc`（`sdadc_buf`） |
+| `.buf.*`（未命中上面具体名）/ `.bss*` / `.sbss*` / COMMON / `.btmem*` / `.ble_cache*` / `.ble_buf*` / `.mem_heap` | **公共数据/BSS/BRAM/heap** | `.data_comm`：`*(.buf*)`/`*(.bss*)`/`*(.btmem*)` 等 | `.data_comm` | comm RAM | **是** | `xcfg_cb`、`ble_adv_env`、`mem_heap` |
+| `.text.func.*` / `.com_sleep.*` / `.text.pwroff*` / `.charge_text*` / `.text.ws_mic_com*` / `.bb_test*` / `.text.update*` / `.text.fot.cache*` / `.irq_init.aligned` / `.text.ble.chmap*` / 通用 `.text.*` / `.rodata.*` | **冷路径/常驻 Flash 代码**（状态机、消息、init、FOTA、充电、关机） | `.flash`：`*(.com_sleep*)`/`*(.text.pwroff*)`/`*(.text*)`/`*(.rodata*)` 等 | `.flash` | flash（VMA==LMA） | 否 | `.text.func.adapter`（`func_adapter`）、`.text.func.mic_emit`（`func_mic_emit`）、`.text.func`（`func_run`）、`.com_sleep.lowpwr.sleep`、`.text.pwroff`（`func_pwroff`） |
+
+**为什么有 `com_text` 和 `text` 之分**（核心动机是 RAM 太小）：
+
+- RAM 一共就 27 KB 公共 + 34 KB 角色，必须挑“真正要快、真正每角色都跑”的代码进 RAM，其余留 Flash。
+- `com_text.*` = **两种角色都要、开机常驻**的公共热路径（ISR、BSP 按键/LED/UART、定时器回调、BLE ISR 上下文）→ 进 `.code_comm`，永远在 RAM。
+- `text.<角色>.proc*` = **某角色专属的热路径**（Adapter 的解码/PLC/混音、Emit 的编码/采集）→ 进 `.code_adapter`/`.code_emit`，只在该角色运行时搬进 RAM，**省的是“另一角色不用时那份 RAM”**。
+- 纯 `text.*`（无 `com`、无角色标记，如 `.text.func.*`、`.com_sleep.*`、`.text.pwroff`）= **冷路径**（状态机、消息处理、init、FOTA、充电、关机）→ 进 `.flash`，**不占 RAM**，跑的时候直接在 Flash 取指（`xr` 属性）。
+
+**一个关键陷阱（命名写错就静默落到 Flash）**：[func_adapter.c](../../functions/func_adapter.c) 里的 `AT(.text.func.adapter)`，其点分路径是 `func.adapter`，**不匹配** `.code_adapter` 的收集模式 `*(.text.adapter.proc*)`（要求以 `.text.adapter.proc` 开头），所以 `func_adapter_init`/`func_adapter` 这类函数**不在** `.code_adapter`，而是落到 `.flash` 的 `*(.text*)` 兜底——map 第 3154–3157 行可验证 `.text.func.adapter` 在 `0x1000a26c`（Flash 区）。这是设计如此（func 入口是冷路径，没必要进 RAM），但也说明：**段名必须和 ram.ld 的收集模式精确匹配，写错一个点就会静默落到 `.flash`，原本想放进 RAM 的热代码就变慢了。**
+
+**另外两个易混点**：
+
+1. **`.usbdev.com.detect` 里的 `com` 不是“公共”**。它的第一个字段是 `usbdev`，由 `.code_adapter` 的 `*(.usbdev.com*)` 收集（尾随 `*` 是链接脚本通配），落到 Adapter 角色 RAM。**判断归属看第一个点分字段，不是看名字里有没有 `com` 子串**——只有第一字段是 `com_text`/`bcom_text`/`com_rodata` 等才是公共。
+2. **`*(.com_text*)` 的尾随 `*` 是通配**，所以 `AT(.com_text.sdadc.isr)`、`AT(.com_text.ble.isr.con)`、`AT(.com_text.timer)` 都会被 `.code_comm` 收下。同理 `*(.text.mic_emit.proc*)` 收下 `.text.mic_emit.proc.sdadc`、`.text.mic_emit.proc.bt_pll`、`.text.mic_emit.proc.ble_page` 等所有子名。这是为什么源码里能看到一长串带后缀的段名而它们仍归同一输出段。
+
+**具体参考哪里**（当你想确认某个 `AT(...)` 会落到哪）：
+
+1. **宏定义**：[header/macro.h](../../header/macro.h) 第 8–9 行（`AT`/`STR`）。
+2. **段名→区映射（唯一权威）**：[ram.ld](../../projects/microphone/ram.ld) `SECTIONS` 里每个输出段的 `*(...)` 收集列表（第 55–449 行）。
+3. **源码用法**：在仓库里搜 `AT(\.` 可看全部用法（约 92 个 `.c` 文件、588+ 处），例如 [bsp_sdadc.c](../../bsp/bsp_sdadc.c) 第 14–39 行同时用了 `AT(.buf.sdadc)`（数据）、`AT(.com_text.sdadc.isr)`（公共 ISR）、`AT(.text.mic_emit.proc.sdadc)`（Emit 热路径）三种。
+4. **实际落点**：在 [map.txt](../../projects/microphone/Output/bin/map.txt) 里搜对应输入段名（如 `.com_text.sdadc.isr`、`.text.mic_emit.proc.sdadc`、`.usbdev.com.detect`），看它出现在哪个输出段、什么地址。
+
+> **小白记法**：`AT(.xxx.yyy)` = “我点名要这个函数/变量住进名叫 `.xxx.yyy` 的房间”；`ram.ld` 的 `*(.xxx*)` = “把名字以 `.xxx` 开头的房间都归到我这层”。命名是开发者定的，归层是 `ram.ld` 定的，map 是最终账本。改 `AT(...)` 名或改 `ram.ld` 的 `*(...)` 都会改变落点——两者要一起改。
+
 ---
 
 ## 7. `.code_comm`：公共代码区
