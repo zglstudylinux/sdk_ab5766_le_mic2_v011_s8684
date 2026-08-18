@@ -54,6 +54,7 @@
 - 项目未定义 `WIRELESS_MIC_K12_KEY_EN`，因此编译使用 [projects/microphone/port/port_key.c](projects/microphone/port/port_key.c) 的非 K12 按键表。
 - **MAGIC 入口**：非 K12 表中 `KEY_ID_K2` 的「长按抬起」列（事件索引 3，`KEY_LONG_UP`，即长按后松手触发）映射到 `MSG_CHANGE_MAGIC`。注意是松手时触发，不是按下时、也不是双击。
 - K12 配置下才是 K3 单击切换 MAGIC；当前板卡不适用 K3 描述。修改或引用按键入口时按当前非 K12 表为准。
+- **按键消息表枚举值上限**：`mic_emit_key_msg_tbl` 的元素类型是 `u8`，[bsp/bsp_key.c](bsp/bsp_key.c) 的 `key_set_msg_tbl` 按字节 `memcpy` 拷贝，`bsp_key_get_msg` 按 `u8` 取值返回。因此经按键表分派的消息，其枚举值必须 < 0x100（0~255），否则写入/读取被截断为低 8 位，悄无声息变成 `MSG_NO`。放在 `MSG_SYS_MAX(0x7ff)` 之后的 `EVT_*` 类消息（如原 `EVT_TEST_X=0x800`）不可放入按键表。实测踩坑记录见 [docs/SDK/AB5766_嵌入式固件SDK_架构导览.md](docs/SDK/AB5766_嵌入式固件SDK_架构导览.md) 第 22 章。
 
 ### USB Mic 已知限制
 
