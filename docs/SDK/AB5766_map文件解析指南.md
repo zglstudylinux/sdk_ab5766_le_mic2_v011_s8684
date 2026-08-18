@@ -754,6 +754,130 @@ Flash 余量 ≈ 0x1001e200 - 0x10018800 = 0x5a00 = 23,040 B
 - [ ] **链接告警**：map 顶部/底部无 `overlaps`/`will not fit`/`section ... not fit`。
 - [ ] **同次保存**：把本次 map.txt、`app.rv32`、`app.bin`、`config_*.h` 快照一起存档，避免日后“map 对不上源码”。
 
+### 15.3 实战案例：AINS4_32K 导致 xmaker 打包阶段 Flash 溢出
+
+> 本案例记录一次真实构建失败：把 `WIRELESS_MIC_32K_EN` 和 `WIRELESS_MIC_AINS4_32K_EN` 从 0 改 1 后，构建在 **postbuild 打包阶段** 报 `overlap`，而 **map.txt 仍能正常生成**。本案例引用的 map 数字来自这一次（AINS4 开启后）构建，可对照当前 [map.txt](../../projects/microphone/Output/bin/map.txt) 复核；作为对比的“基线”数字取自本文档第 9、14.5 节记录的“音效关闭”那次构建。所有结论默认 E2。
+
+#### 15.3.1 现象
+
+构建最后一步（[postbuild.bat](../../projects/microphone/Output/bin/postbuild.bat) 第 15 行调用 `riscv32-elf-xmaker`）报：
+
+```text
+appxm.o|4|[67] Code [0x0-0x1EFFF] and [0x1E000-...] overlap!
+appxm.o|4|> make(dcf_buf, header.bin, app.bin, res.bin, xcfg.bin, updater.bin);
+||=== Build failed: 2 error(s), 1 warning(s) ===|
+```
+
+含义：xmaker 按镜像布局文件 `appxm.o` 把整片 Flash 划成若干区，其中代码区占 `[0x0, 0x1EFFF]`、参数/后续区从 `0x1E000` 起，两者在 `0x1E000 ~ 0x1EFFF` 重叠 `0x1000`（4 KiB）。即**代码镜像已越过程序区上限 `0x1E000`（= `__max_flash_size`，map 第 2010 行）侵入参数保留区**。`0x1E000` 正是 [config_ab5766_le_mic.h](../../projects/microphone/config_ab5766_le_mic.h) 里 `FLASH_SIZE - CM_SIZE = 0x20000 - 0x2000 = 0x1E000` 的程序/参数分界。
+
+#### 15.3.2 关键认知：map 生成成功 ≠ 镜像能打包
+
+这是本案例最容易被误判的地方，必须先分清两个视角：
+
+| 视角 | 校验对象 | 本次结果 |
+|---|---|---|
+| **链接器 `ld`**（生成 map.txt） | 每个输出 section 是否落在其声明的 `MEMORY` 区内 | ✅ **通过**：map.txt 完整生成，无 `region overflow`/`will not fit` |
+| **xmaker**（postbuild 打包镜像） | 物理 Flash 里的镜像区划分（代码区/参数区/updater/xcfg 等）是否互相重叠 | ❌ **失败**：代码区越过 `0x1E000`，与参数区 overlap |
+
+**结论**：本次构建在链接阶段没有越界（map 显示 Flash 仍有约 10 KB 余量，见 15.3.4），溢出发生在之后的打包阶段。**只看“map 有没有生成”会漏判这类问题**——`overlap` 来自 `xmaker`，不来自 `ld`，map.txt 里搜不到它。报错文本里的 `appxm.o|4|` 指向镜像布局文件 `appxm.o`（厂商预编译，其内部区段划分算法本文不展开），不是链接脚本 `ram.ld`。
+
+#### 15.3.3 排查步骤
+
+**第一步：定位报错来自哪个工具。** `overlap` + `make(dcf_buf, ...)` + `appxm.o` 三个特征都指向 postbuild 的 `riscv32-elf-xmaker`（[postbuild.bat:15-18](../../projects/microphone/Output/bin/postbuild.bat)），不是链接器。链接器的报错会带 `region ... overflow`、`will not fit`，并出现在生成 map 之前。
+
+**第二步：确认链接器是否通过。** 检查 `Output/bin/map.txt` 是否生成且末尾无 `overlaps`/`will not fit`。本次 map 完整到 `OUTPUT(Output\bin\app.rv32 elf32-littleriscv)`（map 第 4910 行），说明链接器通过了，问题在打包阶段。
+
+**第三步：在 map 里定位增量来源。** 对比基线（第 9、14.5 节）与本次（AINS4 开启）的关键段：
+
+| 输出 section | 基线 size | 本次 size | 增量 | 是否占 Flash |
+|---|---|---|---|---|
+| `.code_comm` | `0x2cfc` | `0x2da0`（map 第 2032 行） | `+0xa4` | 是（SRC 随 32K 启用进来） |
+| `.code_adapter` | `0x30c8` | `0x30c8` | 0 | 是 |
+| `.code_emit` | `0x528` | `0x34bc`（map 第 2802 行） | **`+0x2f94`** | **是（大头）** |
+| `.data_emit` | `0xfe0` | `0x3b20`（map 第 2901 行） | `+0x2b40` | **否（NOLOAD，不占 Flash）** |
+| `.flash` | `0x12200` | `0x12400`（map 第 2972 行） | `+0x200` | 是 |
+
+**第四步：拆解 `.code_emit` 的 `+0x2f94`。** 这 12 KiB 几乎全是 AINS4_32K 的 code/rodata，来自 `.text.ains4_32k_proc` 和 `.rodata.ains4_32k`（map 第 2821–2855 行）：
+
+| 子段 | 来源对象 | size |
+|---|---|---|
+| `.text.ains4_32k_proc` | `ains4_32k.o` | `0xc6` |
+| `.text.ains4_32k_proc` | `libplatform.a(ains4_dongle.o)` | `0x141a` |
+| `.text.ains4_32k_proc` | `libplatform.a(zoom_fft_core.o)` | `0x166` |
+| `.text.ains4_32k_proc` | `libplatform.a(zoom_fft.o)` | `0x13ee` |
+| `.rodata.ains4_32k` | `ains4_dongle.o`/`zoom_fft_core.o`/`zoom_fft_tbl.o` | `0x210`+`0xf0`+`0x23c` = `0x53c` |
+| 合计 code+rodata（占 Flash） | | `≈ 0x2f70` |
+
+`__code_end_ains4_32k = 0x1a7f4`（map 第 2855 行），即 AINS4 的代码/常量在 emit overlay 里从 `0x17882` 占到 `0x1a7f4`。
+
+**第五步：分清 Flash 成本与 RAM 成本。** AINS4 还有 `.buf.ains4_32k`（map 第 2911–2923 行）：`ains4_32k.o 0x49c` + `libplatform.a(ains4_dongle.o) 0x2738` + `zoom_fft_core.o 0x8` ≈ `0x2bdc`，`__buf_end_ains4_32k = 0x1e260`。但这是 **NOLOAD 的 buffer，不占 Flash，只占 RAM**。所以让 Flash 溢出的是 AINS4 的 **code+rodata（约 12 KiB）**，不是它的 buffer（约 11 KiB）。
+
+#### 15.3.4 两个视角的数字对账
+
+**链接器视角（Flash LMA 链，本次）：**
+
+```text
+.code_comm    LMA 0x10000200, size 0x2da0 -> end 0x10002fa0
+.code_adapter LMA 0x10002fa0, size 0x30c8 -> end 0x10006068
+.code_emit    LMA 0x10006068, size 0x34bc -> end 0x10009524
+.flash        LMA 0x10009600, size 0x12400 -> end 0x1001ba00   (NOLOAD .data_emit 不占 Flash, .flash 紧接 .code_emit + 对齐)
+Flash 程序区上限 = 0x10000200 + 0x1e000 = 0x1001e200
+链接器视角余量 = 0x1001e200 - 0x1001ba00 = 0x2800 = 10,240 B   ← 链接器不报错的原因
+```
+
+**xmaker 视角（镜像文件大小）：** `app.bin` 实测 `0x1ba13`（113,171 B），且 `0x10000000 + 0x1ba13 = 0x1001ba13`，与上面 `.flash end 0x1001ba00` 吻合（差 `0x13` 为尾部对齐），印证 **`app.bin` 大小 = 镜像 LMA 末端 − Flash 基址 `0x10000000`**。
+
+```mermaid
+flowchart LR
+    subgraph BASE["基线 (音效关闭)"]
+        B1[".code_emit 0x528\n很小"]
+        B2[".flash end 0x10018800\n余量 0x5a00 (23KB)"]
+    end
+    subgraph NOW["本次 (AINS4 开启)"]
+        N1[".code_emit 0x34bc\nAINS4 撑大 +0x2f94"]
+        N2[".flash end 0x1001ba00\n余量仅 0x2800 (10KB)"]
+        N3["xmaker 镜像越过 0x1E000\noverlap 0x1000"]
+    end
+    B1 --> N1
+    B2 --> N2
+    N2 --> N3
+```
+
+链接器算出来还剩 10 KB，为何 xmaker 仍 overlap？因为 xmaker 要在物理 Flash 里同时排布 `app.bin + updater.bin + xcfg.bin + header.bin + res.bin`（报错里 `make(...)` 列的就是这五个）并给参数区留位，其布局约束比链接器“单 section 落在 MEMORY 区内”更紧。`app.bin` 涨大后，代码区整体延伸越过 `0x1E000`。**xmaker/appxm.o 的内部区段划分算法属厂商预编译内容，本文不展开；只据报错文本确认“代码镜像越过 `0x1E000` 边界 `0x1000`”。**
+
+#### 15.3.5 RAM 侧未越界
+
+本次失败**只在 Flash，不在 RAM**。emit overlay 区 `[0x17800, 0x20000)` 内：
+
+- AINS4 的 buffer 末尾 `__buf_end_ains4_32k = 0x1e260`（map 第 2923 行）；
+- 其后还续着 `.buf.mic_effect`（到 `0x1e630`）、`.buf.mic_emit.proc`、`.buf.sdadc`，最终 overlay 尾在 `0x1e7e0` 附近，**未越过 `0x20000`**。
+
+即 32K+AINS4 虽然把 `.data_emit` 撑到 `0x3b20`，但都在 emit overlay 的 RAM 预算内。
+
+#### 15.3.6 根因与修复
+
+**根因**：AINS4_32K 的预编译库部分（`ains4_dongle.o` / `zoom_fft.o` / `zoom_fft_core.o`，约 `0x2f70` 的 code+rodata）对 128 KiB Flash 过重，把 `.code_emit` 从 `0x528` 撑到 `0x34bc`，连带把 `app.bin` 撑大，使 xmaker 打包时代码镜像越过 `0x1E000` 侵入参数保留区。
+
+**修复**：回退到更轻的 DNR_FRE 路线，改 [config_ab5766_le_mic.h:114-118](../../projects/microphone/config_ab5766_le_mic.h#L114-L118)：
+
+```c
+#define WIRELESS_MIC_DNR_FRE_EN                 1   // 0 → 1  启用轻量 TX 降噪
+#define WIRELESS_MIC_32K_EN                     0   // 1 → 0  关闭 32k, 回到 48k/120 样点
+#define WIRELESS_MIC_AINS4_32K_EN               0   // 1 → 0  关闭重型 AINS4
+```
+
+理由：DNR_FRE 是完整实现（非“调试中”半成品，“调试中”注释只挂在接收端 `ADAPTER_DNR_FRE_EN`），适配 48 kHz/120 samples，code/buffer 量级远小于 AINS4_32K。若客户明确要 AINS4 级降噪，则 128 KiB Flash 装不下，需关其它功能腾空间或换更大 Flash 型号。
+
+> **顺带提醒**：`wireless_cmd_api.c` 的 `unused variable 'param'` 是 warning，不影响构建，可后续清理。
+
+#### 15.3.7 提炼的教训
+
+1. **map 生成成功 ≠ 镜像能打包**。`overlap` 可能来自 postbuild 的 `xmaker` 而非 `ld`；排查时先按报错文本区分工具，map.txt 里搜不到 xmaker 的 overlap。
+2. **NOLOAD 段涨大不占 Flash**。AINS4 的 buffer（约 11 KiB）没让 Flash 溢出，让 Flash 溢出的是它的 code+rodata（约 12 KiB）。判断“开某功能 Flash 够不够”要看该功能的 **code+rodata 增量**，不是 buffer 增量。
+3. **重型算法的 Flash 成本主要在预编译库的 code/rodata**，且这部分无法通过改源码缩减，只能靠开关或换型号。
+4. **`app.bin` 大小 = 镜像 LMA 末端 − `0x10000000`**，可作为链接器视角与打包视角的对账锚点。
+5. 改配置后若 xmaker 报 overlap 但 map 无越界，优先怀疑“代码镜像整体被某个重型功能撑大，越过 `0x1E000` 程序/参数分界”，按“找最大增量段 → 拆到对象级 → 区分 Flash/RAM”三步定位。
+
 ---
 
 ## 16. 风险与边界总结
