@@ -51,8 +51,8 @@ const u8 mic_emit_key_msg_tbl[KEY_TBL_MAX_NB][KEY_MSG_MAX_IDX] = {
 const u8 mic_emit_key_msg_tbl[KEY_TBL_MAX_NB][KEY_MSG_MAX_IDX] = {
                 //单击,              长按下,                 HOLD,               长按抬起,               双击,               三击                四击            五击
     [KEY_ID_PP] ={MSG_VOL_MUTE,      MSG_NO,                 MSG_PWR_HOLD,       MSG_NO,                 MSG_NO,             MSG_NO,             MSG_NO,         MSG_NO},
-    [KEY_ID_K1] ={MSG_VOL_UP,        MSG_NO,                 MSG_NO,             MSG_TEST_X,                 MSG_NO,             MSG_NO,             MSG_NO,         MSG_NO},
-    [KEY_ID_K2] ={MSG_VOL_DOWN,      MSG_NO,                 MSG_NO,             MSG_CHANGE_MAGIC,                 MSG_NO,             MSG_NO,             MSG_NO,         MSG_NO},
+    [KEY_ID_K1] ={MSG_VOL_UP,        MSG_NO,                 MSG_NO,             MSG_TEST_X,                 MSG_ECHO_LEVEL_UP,MSG_NO,             MSG_NO,         MSG_NO},
+    [KEY_ID_K2] ={MSG_VOL_DOWN,      MSG_NO,                 MSG_NO,             MSG_CHANGE_MAGIC,                 MSG_ECHO_LEVEL_DOWN,MSG_NO,             MSG_NO,         MSG_NO},
     [KEY_ID_K3] ={MSG_NO,            MSG_NO,                 MSG_NO,             MSG_NO,                 MSG_NO,             MSG_NO,             MSG_NO,         MSG_NO},
 };
 #endif

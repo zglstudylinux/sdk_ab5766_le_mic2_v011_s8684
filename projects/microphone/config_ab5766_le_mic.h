@@ -98,7 +98,7 @@
 #define WIRELESS_MIC_SOFT_GAIN_EN               1               //发射端是否开启 带保护的数字增益功能
 #define WIRELESS_MIC_EQ_DRC_EN                  1               //发射端是否开启EQ_DRC功能
 #define WIRELESS_MIC_EQ_DRC_DELAY               WIRELESS_MIC_EQ_DRC_EN*200//EQ_DRC运算时间
-#define WIRELESS_MIC_ECHO_EN                    0               //发射端是否开启 ECHO音效
+#define WIRELESS_MIC_ECHO_EN                    1               //发射端是否开启 ECHO音效
 #define WIRELESS_MIC_ECHO_DELAY                 WIRELESS_MIC_ECHO_EN*200//ECHO运算时间
 #define WIRELESS_MIC_MAGIC_EN                   0               //发射端是否开启 MAGIC音效
 #define WIRELESS_MIC_MAGIC_DELAY                WIRELESS_MIC_MAGIC_EN*300//MAGIC运算时间
@@ -115,7 +115,7 @@
 #define WIRELESS_MIC_DNR_FRE_DELAY              WIRELESS_MIC_DNR_FRE_EN * 720   //发射端DNR_FRE运算时间
 #define WIRELESS_MIC_32K_EN                     1               //是否使能mic 32k采样率
 #define WIRELESS_MIC_SRC_DELAY                  WIRELESS_MIC_32K_EN*200//EQ_DRC运算时间
-#define WIRELESS_MIC_AINS4_32K_EN               1
+#define WIRELESS_MIC_AINS4_32K_EN               0
 
 //适配器端私有配置
 #define ADAPTER_DAC_OUTPUT_EN                   1               //适配器是否支持dac输出MIC音频
@@ -137,7 +137,7 @@
  *****************************************************************************/
 //混响算法
 #define ECHO_EN                                 (WIRELESS_MIC_ECHO_EN)
-#define ECHO_LEVEL			                    70              //attenuation  range:0-90
+#define ECHO_LEVEL                              70              //attenuation  range:0-90
 #define ECHO_DRY_USER                           32767           //干度 range:0-32767
 #define ECHO_WET_USER                           20000           //湿度 range:0-32767
 #define ECHO_DELAY_MAX_LEVEL                    9               //echo延迟等级划分，按照固定的间隔划分成这么多等级，用于后续等级加减
