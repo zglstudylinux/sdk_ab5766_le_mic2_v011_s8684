@@ -24,7 +24,7 @@
 #define BSP_UART_DEBUG_EN               GPIO_PB3                //串口打印调试使能[Baud=1500000]
 #define BSP_ADKEY_EN                    1                       //AD按键使能[Default: PB0]
 #define BSP_IOKEY_EN                    0                       //IO按鍵使能[WK0:PP]
-#define BSP_CHARGE_EN                   0                       //充电功能使能
+#define BSP_CHARGE_EN                   1                       //充电功能使能
 #define BSP_CHARGE_BOX_EN               0                       //是否支持充电仓功能
 #define BSP_TSEN_EN                     0                       //内置温度传感器采集功能
 #define BSP_LED_EN                      1                       //LED灯控制使能, 配置工具的蓝灯跟红灯IO选一样时, 一个IO推两个灯
