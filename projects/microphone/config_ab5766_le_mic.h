@@ -22,6 +22,8 @@
 #define WK0_10S_RESET                   0                       //WK pin 10秒复位功能
 #define SYS_PWROFF_MODE                 PWROFF_MODE2            //软关机模式选择，模式1 VDDIO掉电，模式2 VDDIO不掉电
 #define BSP_UART_DEBUG_EN               GPIO_PB3                //串口打印调试使能[Baud=1500000]
+#define BSP_UART_TRANSFER_EN            1                       //UART1 双线串口收发使能(PA0=TX, PA1=RX)
+#define BSP_UART_TRANSFER_BAUD          115200                  //UART1 transfer 波特率[8N1]
 #define BSP_ADKEY_EN                    1                       //AD按键使能[Default: PB0]
 #define BSP_IOKEY_EN                    0                       //IO按鍵使能[WK0:PP]
 #define BSP_CHARGE_EN                   1                       //充电功能使能

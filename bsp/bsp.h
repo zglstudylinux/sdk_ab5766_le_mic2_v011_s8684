@@ -4,6 +4,7 @@
 #include "bsp_param.h"
 #include "bsp_sys.h"
 #include "bsp_uart_debug.h"
+#include "bsp_uart_transfer.h"
 #include "bsp_saradc.h"
 #include "bsp_saradc_vbat.h"
 #include "bsp_key.h"

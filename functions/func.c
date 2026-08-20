@@ -47,6 +47,10 @@ void func_process(void)
 
     bt_run_loop();
 
+#if BSP_UART_TRANSFER_EN
+    uart_transfer_example();
+#endif
+
 #if BSP_CHARGE_EN
     if (xcfg_cb.charge_working_while_charging) {
         bsp_charge_process();

@@ -251,6 +251,11 @@ void bsp_sys_init(void)
         mic_bias_trim_init(MIC_VDD_LVMODE, MIC_IN_TRIM_TARGET);
     }
 
+#if BSP_UART_TRANSFER_EN
+    //放在 ADC 偏置 trim 之后：避免 UART1 RX 中断干扰 mic_bias_trim_init 的采样时序,导致 trim 超时看门狗复位
+    uart_transfer_init(BSP_UART_TRANSFER_BAUD);
+#endif
+
 #if BSP_TSEN_EN
     bsp_tsensor_init();
 #endif // BSP_TSEN_EN
@@ -287,4 +292,9 @@ void bsp_periph_init(void)
 #if BSP_TSEN_EN
     bsp_tsensor_init();
 #endif // BSP_TSEN_EN
+
+#if BSP_UART_TRANSFER_EN
+    //放在所有外设初始化之后,避免 UART1 RX 中断干扰 SARADC 等外设的采样初始化
+    uart_transfer_init(BSP_UART_TRANSFER_BAUD);
+#endif
 }

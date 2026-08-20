@@ -27,6 +27,11 @@ void uart_transfer_init(u32 baud)
     uart_init_typedef uart_init_struct;
     gpio_init_typedef gpio_init_structure;
 
+    //复位接收软件状态，避免睡眠前残留半包在唤醒后与新数据拼接
+    uart_rx.len = 0;
+    uart_rx.tick = 0;
+    uart_rx.done = 0;
+
     clk_gate0_cmd(CLK_GATE0_UART1, CLK_EN);
     clk_uart_clk_set(UART1_REG, CLK_UART_XOSC24M);
 
@@ -66,10 +71,21 @@ void uart_transfer_example(void)
     u8 *p = uart_rx.buf;
     if (((tick_get() - uart_rx.tick) >= uart_rx.timeout) && uart_rx.len) {
         printf("-->send\n");
-        while (uart_rx.len) {
+        //用快照长度发送,避免 ISR 在发送期间并发改 len 导致永远发不完
+        u16 left = uart_rx.len;
+        bool tx_ok = true;
+        while (left && tx_ok) {
             uart_send_data(UART1_REG, *p++);
-            while (uart_get_flag(UART1_REG, UART_IT_TX) != SET);
-            uart_rx.len --;
+            //等 TX 完成,带超时保护,避免 UART1 异常时阻塞喂不上看门狗
+            u32 wait = 0;
+            while (uart_get_flag(UART1_REG, UART_IT_TX) != SET) {
+                if (++wait > 100000) {
+                    tx_ok = false;
+                    break;
+                }
+            }
+            left--;
         }
+        uart_rx.len = 0;
     }
 }
