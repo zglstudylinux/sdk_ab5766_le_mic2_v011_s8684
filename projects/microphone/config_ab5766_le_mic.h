@@ -24,7 +24,7 @@
 #define BSP_UART_DEBUG_EN               GPIO_PB3                //串口打印调试使能[Baud=1500000]
 #define BSP_ADKEY_EN                    1                       //AD按键使能[Default: PB0]
 #define BSP_IOKEY_EN                    0                       //IO按鍵使能[WK0:PP]
-#define BSP_CHARGE_EN                   0                       //充电功能使能
+#define BSP_CHARGE_EN                   1                       //充电功能使能
 #define BSP_CHARGE_BOX_EN               0                       //是否支持充电仓功能
 #define BSP_TSEN_EN                     0                       //内置温度传感器采集功能
 #define BSP_LED_EN                      1                       //LED灯控制使能, 配置工具的蓝灯跟红灯IO选一样时, 一个IO推两个灯
@@ -115,7 +115,7 @@
 #define WIRELESS_MIC_DNR_FRE_DELAY              WIRELESS_MIC_DNR_FRE_EN * 720   //发射端DNR_FRE运算时间
 #define WIRELESS_MIC_32K_EN                     1               //是否使能mic 32k采样率
 #define WIRELESS_MIC_SRC_DELAY                  WIRELESS_MIC_32K_EN*200//EQ_DRC运算时间
-#define WIRELESS_MIC_AINS4_32K_EN               0
+#define WIRELESS_MIC_AINS4_32K_EN               1
 
 //适配器端私有配置
 #define ADAPTER_DAC_OUTPUT_EN                   1               //适配器是否支持dac输出MIC音频
@@ -142,7 +142,7 @@
 #define ECHO_WET_USER                           20000           //湿度 range:0-32767
 #define ECHO_DELAY_MAX_LEVEL                    9               //echo延迟等级划分，按照固定的间隔划分成这么多等级，用于后续等级加减
 #define ECHO_DELAY_DEFAULT_LEVEL                8               //echo第一次上电默认等级 range:1-ECHO_DELAY_MAX_LEVEL
-#define ECHO_DELAY_BUF_SIZE                     6000            //echo缓存大小（单位：样点数），根据剩余空间配置大小
+#define ECHO_DELAY_BUF_SIZE                     2000            //echo缓存大小（单位：样点数），根据剩余空间配置大小
 #define ECHO_ATTENUATION_MAX_LEVEL              16
 //魔音算法
 #define MAGIC_EN                                (WIRELESS_MIC_MAGIC_EN)
@@ -182,9 +182,9 @@
 /*****************************************************************************
  * Module    : 调音工具配置
 ******************************************************************************/
-#define EQ_DRC_DBG_IN_UART                      1          //是否使能UART在线调节EQ
-#define EFFECT_DBG_ADJUST_EN                    1          //是否使能音效离线调试
-#define EFFECT_DBG_ADJUST_IN_UART               1          //是否使能UART在线调试音效,该功能需要打开EFFECT_DBG_ADJUST_EN和EQ_DBG_IN_UART
+#define EQ_DRC_DBG_IN_UART                      0          //是否使能UART在线调节EQ
+#define EFFECT_DBG_ADJUST_EN                    0          //是否使能音效离线调试
+#define EFFECT_DBG_ADJUST_IN_UART               0          //是否使能UART在线调试音效,该功能需要打开EFFECT_DBG_ADJUST_EN和EQ_DBG_IN_UART
 
 /*****************************************************************************
  * Module    : User按键配置 (可以同时选择多组按键)

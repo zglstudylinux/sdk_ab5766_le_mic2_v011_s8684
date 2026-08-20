@@ -65,7 +65,8 @@
 
 ### 测试纪律与算法边界
 
-- 每次算法测试只改变一个宏或一个参数，独立 Debug 构建/刷写/恢复，保留 `config_diff.txt`、构建日志、`map.txt`、UART、录音。
+- 允许在同一次变更中同时修改多个宏和参数（例如为解决 Flash 溢出而一次性关闭一组功能宏）。每次改动独立 Debug 构建/刷写/恢复，保留 `config_diff.txt`、构建日志、`map.txt`、UART、录音，确保可回溯每个变更集。
+- 需要精确归因「某个宏/参数对音质的影响」的算法 A/B 听感对比时，仍建议尽量控制变量（单宏对比），但不再强制单宏；改动多宏时在 `config_diff.txt` 中记录每个宏的取值与预期影响，便于区分叠加效应。
 - Dump（`WIRELESS_DUMP_EN`）需要时单独建诊断构建，测完恢复 0，不影响实时音频基线。
 - Room Reverb 与 ECHO 同时开启时，源码中 Room Reverb 会被自动 mute（见 [modules/voice/room_reverb.c](modules/voice/room_reverb.c)）；测试 Room Reverb 必须先确认 ECHO 关闭。
 - AGC 当前源码标注「调试中」，可能存在实现/链接风险，应放在算法测试最后，先做构建/链接验证再决定是否刷写。

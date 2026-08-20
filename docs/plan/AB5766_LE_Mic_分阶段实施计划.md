@@ -68,14 +68,14 @@
 
 ### 6.1 评估结论
 
-**总体结论：** 四大功能在 8 引脚约束下均可实现，资源充足。
+**总体结论：** 四大功能在 8 引脚约束下均可实现。Flash 资源在 ECHO+32K+AINS4 三者同开后已顶满（见 6.2），需以「关调试宏 / 关非实时音频功能」换取新功能空间。
 
 | 功能 | 可行性 | 引脚占用 | 资源占用 |
 |---|---|---|---|
-| **混响（ECHO）** | ✅ | DAC PA2（TX 本地监听） | Flash +1.5 KB，mram +12 KB |
-| **降噪** | ✅ | 0（纯算法） | 已占用，无需新增 |
-| **充电** | ✅ | 0（VUSB 检测用内部 ADC，不占用 GPIO） | Flash +0.8 KB |
-| **数码管** | ⏸️ 最后评估 | 暂按 TM1650 预留 PA3/PB1 | 待后续确认 |
+| **混响（ECHO）** | ✅ 已实现 | DAC PA2（TX 本地监听） | 代码 +0.88KB，emit RAM +5.66KB，mram 复用 |
+| **降噪（AINS4 32K）** | ✅ 已实现（与 ECHO/32K 同开） | 0（纯算法） | 代码 +11.9KB，emit RAM +11.0KB —— Flash 主增量 |
+| **充电** | ✅ 已实现 | 0（VUSB 检测用内部 ADC，不占用 GPIO） | Flash +少量（复用库内 charge 模块） |
+| **数码管** | ⏸️ 最后评估 | 暂按 TM1650 预留 PA3/PB1 | 需先腾 Flash 再实现 |
 
 **引脚分配表：**
 
@@ -90,13 +90,15 @@
 
 ### 6.2 资源评估（map.txt）
 
+> 下表为 P1+ 裁剪后（ECHO+32K+AINS4 同开、关调音三宏+RX混音DRC）的新 map.txt 实测值，替代 P1 阶段基线。
+
 | 区域 | 定义大小 | 当前占用 | 余量 | 说明 |
 |---|---|---|---|---|
-| **Flash（代码可用）** | 120 KB (`0x1e000`) | 111 KB (`0x1bff3`) | **约 9 KB** | 由 `.flash` 段 0x10008600–0x1001a5ff + `.code_comm`/`.code_adapter`/`.code_emit` 的 LMA 合计 |
-| **comm（公共 RAM）** | 27 KB (`0x6c00`) | 26.3 KB (`0x68c0`) | **0.7 KB** | 含 `.code_comm` 11.6 KB + `.data_comm` 15.4 KB；**几乎顶满** |
-| **emit（TX 代码+算法缓冲）** | 34 KB (`0x8800`) | 28.4 KB (`0x6fe0`) | **约 5.6 KB** | `.code_emit` 13.5 KB + `.data_emit` 14.9 KB |
-| **adapter（RX 代码+缓冲）** | 34 KB (`0x8800`) | 31.6 KB (`0x7abc`) | **约 2.4 KB** | 只影响 RX/适配器，TX 不看这块 |
-| **mram（ECHO/Reverb 专用复用）** | 32 KB (`0x8000`) | 0 | **32 KB 全空闲** | 当前 ECHO/Reverb 均未使能，此段未被链接使用 |
+| **Flash（代码可用）** | 120 KB (`0x1e000`) | **120 KB**（`.flash` 0x12400 + `.code_comm` 0x2c64 + `.code_adapter` 0x2048 + `.code_emit` 0x3858，LMA 合计 ≈ 0x1e000） | **0 KB（顶满）** | AINS4 段 0x2f72(≈11.9KB) 是主增量；关闭调音三宏+混音DRC 才塞得下。**后续新增代码必须先腾空间** |
+| **comm（公共 RAM）** | 27 KB (`0x6c00`) | `.code_comm` 11.09KB + `.data_comm` 14.88KB = **≈ 25.97 KB**（0x67a8） | **约 1.0 KB** | `.data_comm`=0x3b00(14.88KB)，余量比 P1 基线略宽松 |
+| **emit（TX 代码+算法缓冲）** | 34 KB (`0x8800`) | `.code_emit` 14.08KB + `.data_emit` 18.84KB(0x4b40，含 AINS4 buf 11.0KB + ECHO buf 5.66KB + mic_effect 等) = **≈ 32.9 KB** | **约 1.1 KB** | AINS4 RAM buf 0x2be0 + ECHO RAM buf 0x161e，已接近顶满 |
+| **adapter（RX 代码+缓冲）** | 34 KB (`0x8800`) | `.code_adapter` 8.07KB + `.data_adapter` 22.06KB(0x5650) = **≈ 30.1 KB** | **约 3.9 KB** | 关 `ADAPTER_MIX_DRC_EN` 后 `mic_mix_proc` 段不再链接；`.data_adapter` 占 USB/sbc/plc/lc3dec 等缓冲 |
+| **mram（ECHO/Reverb 专用复用）** | 32 KB (`0x8000`) | `.mram_echo`/`.mram_reverb` 各预留 0x6000(24KB) NOLOAD | 占用 24KB，余 8KB | ECHO 启用时复用该段放 echo/reverb 大 buffer |
 
 ### 6.3 实施步骤
 
@@ -111,21 +113,39 @@
 - **改动**：
   - `projects/microphone/config_ab5766_le_mic.h`：`WIRELESS_MIC_ECHO_EN 0→1`
   - `projects/microphone/config_ab5766_le_mic.h`：`ECHO_DELAY_BUF_SIZE 6000→2000`（防溢出）
-  - `projects/microphone/config_ab5766_le_mic.h`：`WIRELESS_MIC_AINS4_32K_EN 1→0`（关降噪，避免干扰）
   - `projects/microphone/port/port_key.c`：K1 双击列 `MSG_NO→MSG_ECHO_LEVEL_UP`
   - `projects/microphone/port/port_key.c`：K2 双击列 `MSG_NO→MSG_ECHO_LEVEL_DOWN`
 - **原理**：ECHO 算法在发射端 PACC 上处理，处理后的 PCM 经 `dac0_out_audio_input()` 输出到 PA2（TX 本地监听），同时经 LC3S 编码 + 无线传输到 RX 端解码输出。
 - **验证**：TX 耳机和 RX 耳机同时听到混响，K1/K2 双击可调混响等级 0–8
 - **状态**：✅ 已完成（用户确认能听到混响）
 
+#### P1+：同时使能 ECHO + 32K + AINS4（Flash 裁剪）
+
+- **背景**：P1 为隔离混响验证临时将 `WIRELESS_MIC_AINS4_32K_EN 1→0`。现要求 ECHO、32K 采样、AINS4 32K 降噪三者同时使能。
+- **问题**：恢复 `WIRELESS_MIC_AINS4_32K_EN 0→1` 后 `CODE SIZE: 124 KB`，超出 120 KB 上限，链接器报 `Code [0x0-0x1EFFF] and [0x1E000-...] overlap`，构建失败。`ECHO_DELAY_BUF_SIZE` 只省 RAM 不省 Flash，对此无效。
+- **方案**（一次性关闭一组调试/非实时音频宏以腾出 Flash，符合 CLAUDE.md「允许多宏同改」纪律；保留 `WIRELESS_MIC_ECHO_EN=1`、`WIRELESS_MIC_32K_EN=1`、`WIRELESS_MIC_AINS4_32K_EN=1`）：
+  - `ADAPTER_MIX_DRC_EN 1→0`：关 RX 一拖二混音 DRC（单路收听不受影响，仅影响多路混音）
+  - `EQ_DRC_DBG_IN_UART 1→0`：关 UART 在线调 EQ
+  - `EFFECT_DBG_ADJUST_EN 1→0`：关音效离线调试
+  - `EFFECT_DBG_ADJUST_IN_UART 1→0`：关 UART 在线调音效（依赖前两者）
+- **构建证据**：`CODE SIZE: 120 KB`、`Process terminated with status 0`、`0 error(s), 0 warning(s)`，溢出消除。
+- **新 map.txt 关键值**：`.flash`(`__bank_size`)=0x12400(≈73.25KB)、`.code_comm`(`__comm_size`)=0x2c64(≈11.09KB)、`.code_adapter`(`__comm_apapter_size`)=0x2048(≈8.07KB)、`.code_emit`(`__comm_emit_size`)=0x3858(≈14.08KB)、`.code_test`(`__comm_test_size`)=0。AINS4 代码段 0x2f72(≈11.9KB)、AINS4 RAM buf 0x2be0(≈11.0KB)、ECHO 代码段 0x388(≈0.88KB)、ECHO RAM buf 0x161e(≈5.66KB)。
+- **余量**：xmaker 报告 `CODE SIZE: 120 KB`，与 120 KB(`0x1e000`) 上限持平；可加载 Flash 段累加约 107 KB，与工具报告的 120 KB 差额来自段间对齐填充与下载镜像组织。可认为 **Flash 余量极小（0–13 KB）**，后续新增代码必须先腾空间。
+- **已验证未触发的两个链接风险**：
+  1. `effect_update_callback_tbl`（[effect_table.c](modules/effect/effect_table.c) 无条件引用 6 个回调，回调定义在 `#if EFFECT_DBG_ADJUST_EN` 内）——构建未报 undefined reference，map.txt 中该表无符号、`toolkit.o`/`toolkit_effect.o` 的 `.text` 均为 `0x0`，证明 `--gc-sections` 已随未引用消费者将其丢弃，无需给 effect_table.c 加 `#if` 包裹。
+  2. `bsp_huart.o`（受 `LE_DUT_UART_EN || EQ_DRC_DBG_IN_UART` 控制，两者均为 0）——`.text` 为 `0x0`，GC 丢弃，无 undefined reference。
+- **状态**：✅ 已完成（构建通过，待刷写 + 听感/打印验证 ECHO/降噪/充电三功能同时可用）
+
 #### P2：充电检测
 
 - **改动**：
   - `projects/microphone/config_ab5766_le_mic.h`：`BSP_CHARGE_EN 0→1`
-  - 确认 `xcfg_cb.charge_en=1` 在烧录配置里打开
-- **原理**：`bsp_charge_process()` 调用 `charge_detect_dc()` 读 `RTCCON` 寄存器位 20/22 判断 VUSB 插入，状态机驱动充电流程。
-- **验证**：插充电器看到 `charge: x` 打印，状态跳转正常，低电检测避开充电期
-- **状态**：⏳ 待实现
+  - `projects/microphone/Output/bin/xcfg.xm`：`CHARGE_WORKING_WHILE_CHARGING 0→1`（真正生效项——prebuild.bat 经 `riscv32-elf-xmaker -b xcfg.xm` 生成 `xcfg.h`，`xcfg_cb.charge_working_while_charging` 默认值由此决定）
+  - `projects/microphone/Output/bin/Settings/wireless_mic_emit.setting`：`charge_working_while_charging False→True`、`mic_dig_gain 36→0`（ToolKit 默认值同步，不影响构建，仅工具界面显示用）
+  - 保持 `rled_disp_en=False`（红灯 IO 未确认有效电平，暂不开充电指示灯）
+- **原理**：`bsp_charge_process()` 调用 `charge_detect_dc()` 读 `RTCCON[20]VUSB/[22]INBOX` 判断充电器插入，状态机驱动涓流→恒流→恒压→充满流程。`charge_working_while_charging=True` 时，插入充电器不会阻塞主循环，可边充电边正常发射音频。
+- **验证**：插充电器看到 `charge: 3`（恒流）或 `charge: 4`（恒压）打印，充满后 `charge: 2`（充满但还插着）→ 自动关机；充电过程中无线连接和音频正常
+- **状态**：✅ 已完成（代码+配置已改，本次构建通过，待刷写验证 `charge: x` 打印）
 
 #### P3：数码管驱动（TM1650）
 
@@ -149,13 +169,16 @@
 
 | 风险 | 影响 | 缓解措施 |
 |---|---|---|
-| **comm RAM 余量 0.7 KB** | 数码管/充电 buffer 需严格控制 | 数码管用全局变量 < 100 字节，充电复用现有 `charge_status` 结构体 |
-| **ECHO 与 MAGIC 互斥** | 后续若开 MAGIC 会挤占 emit 区 | 当前 MAGIC_EN=0，无风险；后续需评估 emit 剩余 5.6 KB 是否够 |
-| **ECHO buffer 溢出** | `.data_emit` 溢出 6872 字节 | 已通过减小 `ECHO_DELAY_BUF_SIZE` 到 2000 解决 |
+| **Flash 余量 0–13 KB（顶满）** | P3 数码管驱动新增 `.text` 会立即溢出 | 先用 `WIRELESS_MIC_DAC_OUT_EN 1→0`（P4）或关更多调试宏腾空间再实现 P3；优先把驱动放 `AT(.text.bsp.7seg)` 便于 GC |
+| **comm RAM 余量约 1.0 KB** | 数码管/充电 buffer 需严格控制 | 数码管用全局变量 < 100 字节，充电复用现有 `charge_status` 结构体 |
+| **emit RAM 余量约 1.1 KB** | AINS4 buf(11KB)+ECHO buf(5.66KB) 已占大半 | ECHO buffer 已缩到 2000 样点；若开 MAGIC 需先评估 `pitch_shift` buf |
+| **ECHO 与 MAGIC 互斥** | 后续若开 MAGIC 会挤占 emit 区 | 当前 MAGIC_EN=0，无风险；开 MAGIC 前评估 emit 剩余 1.1KB 是否够 |
+| **ECHO buffer 溢出** | `.data_emit` 曾溢出 6872 字节 | 已通过减小 `ECHO_DELAY_BUF_SIZE` 到 2000 解决 |
 | **mram 区不可执行** | 把 `delay_lbuf` 放 mram 导致 INST ERR | 已恢复 `AT(.buf.echo.delay)`，不再放 mram |
+| **effect_update_callback_tbl 链接风险** | `EFFECT_DBG_ADJUST_EN=0` 后 6 个回调定义消失，但表无条件引用它们 | 本构建已验证 `--gc-sections` 丢弃了该表（map 无符号、toolkit.o/toolkit_effect.o `.text`=0），未报 undefined reference；若后续手动调整链接脚本/GC 选项需复验 |
 
 ### 6.5 后续扩展建议
 
-- **降噪恢复**：P1 验证混响后，可单独开 `WIRELESS_MIC_AINS4_32K_EN=1` 验证降噪，或换 DNR_FRE（`WIRELESS_MIC_DNR_FRE_EN=1`）节省空间
-- **数码管硬件确认**：TM1650 采购后实现 P3
+- **降噪恢复**：✅ 已在 P1+ 恢复 `WIRELESS_MIC_AINS4_32K_EN=1`，ECHO+32K+AINS4 三者同开且构建通过；待刷写听感验证
+- **数码管硬件确认**：TM1650 采购后实现 P3（注意先腾 Flash）
 - **按键扩展**：PA0/PA1/PA4/PB4 可留给 KEY4、LED、第二路 ADC 等扩展
