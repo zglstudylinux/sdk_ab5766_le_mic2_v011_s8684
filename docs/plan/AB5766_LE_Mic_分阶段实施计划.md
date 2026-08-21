@@ -33,9 +33,60 @@
 - 已完成禁用态安全保护：`bled_set_on()`、`bled_set_off()` 与 `led_scan()` 在 `xcfg_cb.bled_disp_en=0` 时不再操作或扫描蓝灯 GPIO。
 - 保持既有状态链路：`xcfg_init()` → `led_init()`，无线连接状态变化 → `led_bt_idle()` / `led_bt_connected()`；未修改无线状态机、定时器调度或默认图样。
 - `BSP_LED_EN` 是编译期开关；`xcfg_cb.bled_disp_en`、`bled_io_sel` 是运行时配置。配置界面的默认 PA0 不是已确认的板级连接，未经硬件确认不得启用蓝灯或修改 GPIO 默认值。
-- 当前 `BSP_CHARGE_EN=0`，红色充电指示灯不属于本阶段验证范围；共享 IO 的双色灯也须在确认电路拓扑后单独验证。
+- 红色充电指示灯原属阶段 6 P2 范围，现已在 P2 启用并实测（PB4 恒亮正常）；红灯无闪烁机制的根因见下方 B 节。共享 IO 的双色灯也须在确认电路拓扑后单独验证。
+- **引脚冲突约束**：蓝灯 IO 不可选 PB3。PB3 是编译期 `BSP_UART_DEBUG_EN`（UART0 TX 交叉开关），蓝灯配 PB3 会致启动卡死，详见下方 A 节。
 - 验收：在确认蓝灯 GPIO、有效电平、独立/共脚拓扑和引脚无冲突后，由用户构建、烧录，验证未连接、首条连接、最后一条断开时的状态转换，并结合现有连接日志记录结果。
 - 阶段完成后等待用户确认，才提交/上传并进入按键阶段。
+
+### 阶段 2 实测发现：PB3 蓝灯冲突卡死 与 红灯无闪烁机制
+
+> 本节为用户在真实硬件上配置 LED 后的实测结果与根因排查，归档于阶段 2。两项发现均与 LED 引脚/驱动直接相关，其中充电红灯的实际启用发生在阶段 6 P2，但红灯「无闪烁机制」这一驱动层事实在此一并记录。
+
+#### A. 蓝灯配置到 PB3 会卡死在启动日志处
+
+**现象**：经 ToolKit 把「系统指示灯（蓝灯）」IO 选为 PB3（`bled_io_sel=179`）后，串口打印停在 PMU 初始化末尾，不再推进：
+
+```text
+lock wireless_mic comm
+vddio:10
+vddcore:20
+vddbt:9
+lvd:2
+-->ldo_en
+vddbt_capless_en:1
+```
+
+把蓝灯移出 PB3、改配到其他引脚后，打印恢复正常。充电红灯配到 PB4 目前正常。
+
+> 注：基线启动日志该行为 `vddbt_capless_en:0`（见 [../SDK/AB5766_启动日志_每一行打印的来源与调用链路.md](../SDK/AB5766_启动日志_每一行打印的来源与调用链路.md)）；此处为 `:1` 是因为当前运行时配置 `vddbt_capless_en=True`（[wireless_mic_emit.setting](../../projects/microphone/Output/bin/Settings/wireless_mic_emit.setting)），非异常。
+
+**根因**：PB3 在编译期同时被定义为调试串口引脚——[config_ab5766_le_mic.h:24](../../projects/microphone/config_ab5766_le_mic.h) `#define BSP_UART_DEBUG_EN GPIO_PB3`。`bsp_uart_debug_init()`（[bsp_uart_debug.c](../../bsp/bsp_uart_debug.c)）把 UART0 的 TX 经交叉开关映射到 PB3（`gpio_func_mapping_config(..., GPIO_CROSSBAR_OUT_UART0TX)`），printf 的 putchar 经 UART0 从 PB3 输出。该初始化在启动早期由库回调 `uart_debug_init_callback()`（[strong_symbol.c:66](../../projects/microphone/strong_symbol.c)）触发完成。
+
+而在 [bsp_sys.c:224](../../bsp/bsp_sys.c) 的 `led_init()` 中，当 `xcfg_cb.bled_disp_en` 为真且 `bled_io_sel=179`(PB3) 时，`led_cfg_init(BSP_BLED_PIN, BSP_BLED_PORT, 0)` → `gpio_init(GPIOB_REG, ...)` 把 PB3 重新配置为「数字输出 GPIO」（`GPIO_FEN_GPIO` + `GPIO_FDIR_SELF` + `GPIO_MODE_DIGITAL` + `GPIO_DIR_OUTPUT`，见 [driver_gpio.c:15](../../driver/driver_gpio.c) 的 `gpio_init`），**覆盖了先前建立的 UART0 TX 交叉开关映射**。
+
+此后 UART0 发送时，发送完成标志（`UARTxCON_TXPND`，[driver_uart.c:150](../../driver/driver_uart.c) 中 `uart_baud_config` 即以 `while ((uartx->con & UARTxCON_TXPND) == 0);` 方式等待）因 TX 物理引脚已不再是 UART 外设引脚而无法按预期翻转，putchar 的忙等待死循环，系统卡死。
+
+**为何日志正好停在 `vddbt_capless_en:1`**：`bsp_sys_init()`（[bsp_sys.c:200](../../bsp/bsp_sys.c)）的顺序是 `xcfg_init` → `bsp_var_init` → `wireless_mic_var_init` → `pmu_init`（打印 `lock wireless_mic comm` … `vddbt_capless_en:1`）→ … → `led_init()`（L224，此处破坏 PB3 的 UART TX 映射，本身无打印）→ … → `printf("%s\n",__func__)`（L264，打印 `bsp_sys_init`）。PMU 的全部打印在 `led_init()` 之前完成，所以最后一条可见日志是 pmu_init 的末行 `vddbt_capless_en:1`；紧接着 `led_init()` 破坏引脚，下一处 printf（L264 的 `bsp_sys_init`）即死锁，故该行不再出现，与用户观察一致。
+
+**解决路径**（二选一）：
+1. 蓝灯不配 PB3，改用其他空闲引脚——当前实测改到 PA0（`bled_io_sel=160`），打印恢复正常；仅改运行时配置，无需重新编译。
+2. 若一定要用 PB3 作蓝灯，须先把编译期 `BSP_UART_DEBUG_EN` 从 `GPIO_PB3` 改到其他引脚（PA0/PA1/PA4 均可，见双板测试指南「调试串口改 PA4」的先例 [../SDK/AB5766_无线麦克风_双板连接与LED测试指南.md](../SDK/AB5766_无线麦克风_双板连接与LED测试指南.md) 第 4.1 节），重新编译烧录后再把蓝灯配到 PB3。
+
+> 本条同时作为 6.4 风险表「蓝灯配 PB3 致启动卡死」的根因依据。
+
+#### B. 红灯（充电指示灯）没有闪烁机制，仅恒亮/恒灭
+
+排查 [bsp_led.c](../../bsp/bsp_led.c) 与 [bsp_charge.c](../../bsp/bsp_charge.c) 后确认：红灯不存在任何闪烁驱动路径，`led_cb_t.rled_sta` 是死字段。
+
+- `led_set_sta_p()`（[bsp_led.c:189](../../bsp/bsp_led.c)）只写 `s->bled_sta = sta.bluepat`，从不写 `s->rled_sta`；`rled_sta`（[bsp_led.h:20](../../bsp/bsp_led.h)）在整个 LED 状态链路中没有任何写入点。
+- `led_scan()`（[bsp_led.c:214](../../bsp/bsp_led.c)）的模式消耗只读 `s->bled_sta & BIT(bcnt)`（L246），据此调用 `bled_set_on/off()`，**从不引用 `rled_sta`，也从不调用 `rled_set_on/rled_set_off`**。
+- 因此所有 `led_bt_idle()` / `led_bt_connected()` / `led_power_up()` / `led_power_down()` 设置的图样（含 `redpat` 字节）只会影响蓝灯，红灯纹丝不动。
+
+红灯唯一的驱动来自充电流程：`bsp_charge_process()`（[bsp_charge.c:110](../../bsp/bsp_charge.c)）在充电状态变化时，若 `charge_status >= CHARGE_STA_ON_CON_CURR` 调 `led_charge_on()`（红灯恒亮 + 蓝灯灭），否则调 `led_charge_off()`（红灯灭）。即红灯只有「充电中恒亮 / 非充电恒灭」两态，**无闪烁**。
+
+**当前实测**：充电红灯配在 PB4（`rled_io_sel=180`，`rled_disp_en=True`，`charge_en=True`），高电平点亮（`rled_set_on()` 用 `gpio_set_bits`，见 [bsp_led.c:97](../../bsp/bsp_led.c)），充电时红灯恒亮正常。PB4 虽为 USB DM，但本工程 USB 相关宏全关，无冲突。
+
+**若后续需要红灯闪烁**（例如充电异常提示、低电告警），需新增驱动：在 `led_set_sta_p()` 写入 `s->rled_sta`，并在 `led_scan()` 的 `charge_flag` 早退分支之外另开红灯模式消耗分支（或单独加红灯扫描入口）。该改动属于新功能，不在当前阶段范围，实施前需单独评审。
 
 ## 阶段 3：按键
 
@@ -75,18 +126,19 @@
 | **混响（ECHO）** | ✅ 已实现 | DAC PA2（TX 本地监听） | 代码 +0.88KB，emit RAM +5.66KB，mram 复用 |
 | **降噪（AINS4 32K）** | ✅ 已实现（与 ECHO/32K 同开） | 0（纯算法） | 代码 +11.9KB，emit RAM +11.0KB —— Flash 主增量 |
 | **充电** | ✅ 已实现 | 0（VUSB 检测用内部 ADC，不占用 GPIO） | Flash +少量（复用库内 charge 模块） |
-| **数码管** | ⏸️ 最后评估 | 暂按 TM1650 预留 PA3/PB1 | 需先腾 Flash 再实现 |
+| **数码管** | ✅ 已评估（软件可行，待硬件） | TM1650 预留 PA3(SDA)/PB1(SCL)，走硬件 IIC | 驱动+字形约 0.6–1.0KB，须先腾 Flash；电量显示需另开 `BSP_VBAT_DETECT_EN` |
 
 **引脚分配表：**
 
 | 引脚 | 功能 | 备注 |
 |---|---|---|
 | PB0 | ADKEY（PP/K1/K2） | 不变 |
-| PB3 | UART Debug | 保留打印 |
+| PB3 | UART Debug | 保留打印；**该脚不可再配蓝灯**——PB3 是编译期 `BSP_UART_DEBUG_EN`，蓝灯配 PB3 会致启动卡死（见 6.4 风险表「蓝灯配 PB3 致启动卡死」、阶段 2 A 节） |
 | PA2 | **DAC 输出** | TX 本地混响监听 |
-| PA3 | 预留 | 后续 TM1650 SDA |
-| PB1 | 预留 | 后续 TM1650 SCL |
-| PA0/PA1/PA4/PB4 | 预留 | 扩展用 |
+| PA3 | **TM1650 SDA** | IIC 数据线，走 `FO_I2CSDA` 功能映射 |
+| PB1 | **TM1650 SCL** | IIC 时钟线，走 `FO_I2CSCL` 功能映射 |
+| PA0/PA1/PA4 | 预留 | 扩展用；当前蓝灯实测配在 PA0（`bled_io_sel=160`），见阶段 2 A 节 |
+| PB4 | **充电红灯** | `rled_io_sel=180`(PB4)，高电平点亮，充电恒亮正常；虽为 USB DM，但本工程 USB 相关宏全关，无冲突（见阶段 2 B 节） |
 
 ### 6.2 资源评估（map.txt）
 
@@ -142,20 +194,36 @@
   - `projects/microphone/config_ab5766_le_mic.h`：`BSP_CHARGE_EN 0→1`
   - `projects/microphone/Output/bin/xcfg.xm`：`CHARGE_WORKING_WHILE_CHARGING 0→1`（真正生效项——prebuild.bat 经 `riscv32-elf-xmaker -b xcfg.xm` 生成 `xcfg.h`，`xcfg_cb.charge_working_while_charging` 默认值由此决定）
   - `projects/microphone/Output/bin/Settings/wireless_mic_emit.setting`：`charge_working_while_charging False→True`、`mic_dig_gain 36→0`（ToolKit 默认值同步，不影响构建，仅工具界面显示用）
-  - 保持 `rled_disp_en=False`（红灯 IO 未确认有效电平，暂不开充电指示灯）
+  - 充电红灯 IO 配置：`rled_disp_en=True`、`rled_io_sel=180`(PB4)（运行时配置，无需重编译）
 - **原理**：`bsp_charge_process()` 调用 `charge_detect_dc()` 读 `RTCCON[20]VUSB/[22]INBOX` 判断充电器插入，状态机驱动涓流→恒流→恒压→充满流程。`charge_working_while_charging=True` 时，插入充电器不会阻塞主循环，可边充电边正常发射音频。
 - **验证**：插充电器看到 `charge: 3`（恒流）或 `charge: 4`（恒压）打印，充满后 `charge: 2`（充满但还插着）→ 自动关机；充电过程中无线连接和音频正常
 - **状态**：✅ 已完成（代码+配置已改，本次构建通过，待刷写验证 `charge: x` 打印）
 
+> 充电红灯实测：红灯配 PB4（`rled_io_sel=180`）高电平点亮，充电时恒亮正常。注意红灯无闪烁机制，仅恒亮/恒灭（见阶段 2 B 节、6.4 风险表「红灯无闪烁机制」）。
+
 #### P3：数码管驱动（TM1650）
 
-- **改动**：
-  - 新增 `bsp/bsp_7seg.c/h`，用 `driver_iic.c` 的 I2C 接口驱动 TM1650
+**评估结论（本次补充，仅评估，未改代码）：**
+
+- **可行性**：✅ 软件可行。AB5766 自带硬件 IIC 控制器（`driver_iic.c`）与 `FO_I2CSCL/FO_I2CSDA` GPIO 功能映射，不需要软件模拟 I2C，也无需新增底层外设驱动。当前 `driver_iic.o` 已被 `--gc-sections` 丢弃（map.txt 中该模块 `.text/.data/.bss` 全为 `0x0`），新增 `bsp_7seg` 调用 IIC 后才需重新链接进固件。
+- **接线与冲突确认**：SDA→PA3、SCL→PB1。两者均未在 `WIRELESS_MIC_DAC_OUT_EN=1`（TX 本地监听）路径中占用——DAC 监听只占 PA2（`dac0_out_init`→SDDAC），IIS IOMAP_0（PA8/PA0/PA1/PA2/PA3）在本工程**未被调用**（`bsp_iis_init` 无任何 `functions/`、`modules/` 引用，对应 IIS 段 GC 掉）。PA3 是 SDADC DC 模式的可选采样通道（`DC_SAMP_CH2_PA3_EN`），但当前 MIC 模式（`SDADC_MODE_MIC`）不使用，无冲突。
+- **驱动数据通路**：`bsp_7seg_init()` → `iic_master_init(IIC_REG, ...)` + `gpio_func_mapping_config(GPIOA_REG, GPIO_PIN_3, GPIO_CROSSBAR_OUT_I2CSDA)` + `gpio_func_mapping_config(GPIOB_REG, GPIO_PIN_1, GPIO_CROSSBAR_OUT_I2CSCL)` → `iic_master_send_data(IIC_REG, dev_addr, reg_addr, data, len, timeout_ms)`。
+- **TM1650 协议要点**：7-bit 设备地址 0x24（默认，写地址 0x48）；两条命令——`0x48`（系统设置：位 0 显示开关、位 1~2 亮度 1~7 级、位 3 显示测试）；`0x68~0x6F`（4 个 DIG 位地址，数据字节为 7 段码）。本 SDK `iic_master_send_data` 的 `dev_addr` 参数**会被 `& 0xfe`**（见 `iic_transmit_config`），因此传 0x48（或 0x68）即可，无需手动补读写位。每次最多传 4 字节（`len<=4`），TM1650 每命令 2 字节，满足。
+- **IIC 时钟**：`clk_iic_set(CLK_IIC_RC2M)`（RC2M≈2MHz）或 `CLK_IIC_X24MDIV8`（24M/8=3MHz）二选一，配合 `iic_master_init` 的 `scl_pose_div`/`sda_hold_cnt` 得到 ≤ TM1650 支持的 100k/400k 时钟。具体分频值需在实现时按 `driver_iic.c` 的 POSDIV/HOLDCNT 字段实测标定（仓库无 TM1650 现成参数，不能用 SDK 默认值照抄）。
+- **显示内容映射**：
+  - 混响等级：`echo_delay_level_get()`（`modules/voice/echo.c:148`，返回 0~8）→ 显示 `0~8` 或 `ECHO_DELAY_MAX_LEVEL=9` 对应档位。
+  - 充电状态：`charge_get_status()`（`driver_charge.h:208`，`CHARGE_STA_OFF=1 / OFF_BUT_DC_IN=2 / ON_TRICKLE=3 / ON_CON_CURR=4 / ON_CON_VOL=5`）→ 显示 `C`（充电中）或闪烁。注：充电红灯本身无闪烁机制（见阶段 2 B 节），数码管上的充电状态闪烁需由 `bsp_7seg` 自行实现，不能复用红灯闪烁路径。
+  - 电量：**当前 `BSP_VBAT_DETECT_EN=0`**，`bsp_get_vbat_level()`（`bsp_saradc_vbat.c:140`）整体不编译（`#if BSP_VBAT_DETECT_EN`）。要显示 0~9 电量，必须另行把 `BSP_VBAT_DETECT_EN 0→1`，会额外占用 SARADC 采集周期与 Flash，需单独评估（见 6.4 风险表新增项）。
+- **Flash 空间约束（最关键）**：`bsp_7seg.c/h` + 7 段字形表 + IIC 驱动重链接，估算 `.text` 增量约 0.6~1.0KB。当前 Flash 已顶满 120KB（余量 0~13KB，见 6.2），直接加会冒溢出风险。**实现 P3 前必须先腾空间**，首选 P4 `WIRELESS_MIC_DAC_OUT_EN 1→0`（省 TX 本地监听 DAC 链路 `dac0_out_init/dac0_out_audio_input` 及 SDDAC 相关段），或再关一个非实时功能宏。
+- **构建集成**：新增 `bsp/bsp_7seg.c` 需在 `projects/microphone/app.cbp` 的编译文件列表中加入（否则不参与链接，表现为 undefined reference）；建议把驱动段用 `AT(.text.bsp.7seg)` 独立标注，便于 `--gc-sections` 在未启用时整体回收。
+
+- **改动（待硬件到位后实施，当前不执行）**：
+  - 新增 `bsp/bsp_7seg.c/h`，用 `driver_iic.c` 的硬件 I2C 接口驱动 TM1650
   - 硬件连接：SDA→PA3、SCL→PB1
   - 在 `app.cbp` 里把 `bsp_7seg.c` 加进构建列表
 - **原理**：TM1650 是 I2C 接口的 4 位 7 段数码管驱动芯片，只需 2 根线即可驱动 4 位数码管。
 - **验证**：数码管显示电量 0–9、混响等级 0–9、充电状态（全亮/闪烁），无乱码
-- **状态**：⏸️ 待评估（硬件未确认）
+- **状态**：⏸️ 待硬件（软件评估已完成，未改代码）
 
 #### P4：去掉 TX 本地监听
 
@@ -176,9 +244,13 @@
 | **ECHO buffer 溢出** | `.data_emit` 曾溢出 6872 字节 | 已通过减小 `ECHO_DELAY_BUF_SIZE` 到 2000 解决 |
 | **mram 区不可执行** | 把 `delay_lbuf` 放 mram 导致 INST ERR | 已恢复 `AT(.buf.echo.delay)`，不再放 mram |
 | **effect_update_callback_tbl 链接风险** | `EFFECT_DBG_ADJUST_EN=0` 后 6 个回调定义消失，但表无条件引用它们 | 本构建已验证 `--gc-sections` 丢弃了该表（map 无符号、toolkit.o/toolkit_effect.o `.text`=0），未报 undefined reference；若后续手动调整链接脚本/GC 选项需复验 |
+| **数码管电量显示依赖 VBAT 检测** | 当前 `BSP_VBAT_DETECT_EN=0`，`bsp_get_vbat_level()` 不编译，数码管无法显示真实电量 | 实现 P3 电量显示时需同步评估 `BSP_VBAT_DETECT_EN 0→1` 的 SARADC 采集周期与 Flash/RAM 增量；短期可先显示混响等级+充电状态，电量留待后续 |
+| **IIC 时钟参数无现成标定** | 仓库无 TM1650 现成 IIC 分频参数，SDK 默认 `scl_pose_div`/`sda_hold_cnt` 不保证匹配 TM1650 100k/400k | 实现时按 `driver_iic.c` 的 POSDIV/HOLDCNT 字段结合 `clk_iic_set` 时钟源实测标定，先逻辑分析仪/示波器看 SCL 波形再连数码管 |
+| **蓝灯配 PB3 致启动卡死** | PB3 同时是编译期 `BSP_UART_DEBUG_EN`（UART0 TX 交叉开关），蓝灯配 PB3 后 `led_init()`→`gpio_init()` 把 PB3 改成数字输出 GPIO，覆盖 UART TX 映射，printf 忙等待死锁，系统卡在 PMU 末行 `vddbt_capless_en:1` 之后 | 蓝灯不配 PB3（实测改 PA0 即恢复）；若必须用 PB3，先把 `BSP_UART_DEBUG_EN` 改到 PA0/PA1/PA4 并重编译。详见阶段 2「PB3 蓝灯冲突卡死」与 6.1 引脚表注 |
+| **红灯无闪烁机制（`rled_sta` 死字段）** | `led_set_sta_p()` 只写 `bled_sta`、`led_scan()` 只消耗 `bled_sta`，红灯无任何闪烁路径，`rled_sta` 从无写入点。红灯仅 `led_charge_on/off` 恒亮/恒灭 | 后续若需红灯闪烁告警/低电提示，须新增 `rled_sta` 写入点与 `led_scan()` 红灯分支，属新功能需单独评审；当前充电红灯 PB4 恒亮已实测正常 |
 
 ### 6.5 后续扩展建议
 
 - **降噪恢复**：✅ 已在 P1+ 恢复 `WIRELESS_MIC_AINS4_32K_EN=1`，ECHO+32K+AINS4 三者同开且构建通过；待刷写听感验证
-- **数码管硬件确认**：TM1650 采购后实现 P3（注意先腾 Flash）
+- **数码管硬件确认**：TM1650 采购后实现 P3（软件评估已完成：走硬件 IIC、PA3/PB1 无冲突；注意先腾 Flash，电量显示另需 `BSP_VBAT_DETECT_EN`）
 - **按键扩展**：PA0/PA1/PA4/PB4 可留给 KEY4、LED、第二路 ADC 等扩展
