@@ -421,6 +421,244 @@ void sdadc_ana_init(sdadc_ana_cfg_typedef *cfg);
 - **BSP 函数**：接收"业务级参数"（如 `WIRELESS_MIC_SAMPLE_RATE_SELECT`），内部调多个 HAL/Driver 函数
 - **Driver 函数**：只操作一个外设，不关心业务
 
+### 第 7 章附录 · LED 显示子系统：分层解耦全景（按调用链核查）
+
+> 本附录把 LED 显示子系统当作 BSP 层的第二个教科书案例，完整梳理其**五层解耦架构**与**全部调用关系**，所有引用均精确到 `文件:行号:函数`，并经实际代码确认。文末另列三个**解耦破缺点**（死接口 / 死字段 / 引脚冲突），与 [../plan/AB5766_LE_Mic_分阶段实施计划.md](../plan/AB5766_LE_Mic_分阶段实施计划.md) 阶段 2 的实测发现互为印证。
+
+#### A. 五层解耦架构总览
+
+LED 子系统从上到下分为五层，层与层之间只通过明确定义的接口耦合，任意一层可被替换而不牵连他层（引脚冲突是唯一破坏这一隔离的破缺点，见 E 节）：
+
+| 层 | 职责 | 关键文件 / 符号 | 与下一层的耦合点 |
+|---|---|---|---|
+| ① **配置层** | 运行时决定「用不用灯、灯在哪个 IO、闪什么图样」 | [xcfg.h:50-81](../../projects/microphone/xcfg.h) `xcfg_cb` 字段 | 被 ②③④读取 |
+| ② **编译期开关层** | 编译期决定「编不编 LED、编不编数码管、UART 占哪个脚」 | [config_ab5766_le_mic.h:24/30/31](../../projects/microphone/config_ab5766_le_mic.h) | 包裹 ③④⑤的 `#if` |
+| ③ **BSP LED 驱动层** | 状态机 + 图样消耗器：把「图样数据」翻译成「亮灭动作」 | [bsp_led.c](../../bsp/bsp_led.c) / [bsp_led.h](../../bsp/bsp_led.h) | 调 ④的 `gpio_*` |
+| ④ **GPIO HAL/Driver 层** | 寄存器级：把「亮灭动作」落到具体引脚电平 | [driver_gpio.c:15](../../driver/driver_gpio.c) `gpio_init` 等 | 操作 SFR |
+| ⑤ **业务调用层 + 定时器调度层** | 决定「什么时候设什么图样」「什么时候扫描」 | [wireless_proc.c:319](../../modules/wireless/wireless_proc.c) / [func_*.c](../../functions/) / [bsp_sys.c:61](../../bsp/bsp_sys.c) / [bsp_charge.c:110](../../bsp/bsp_charge.c) | 调 ③的公开接口 |
+
+```mermaid
+flowchart TD
+    subgraph L1["① 配置层 xcfg_cb（运行时 / Flash 加载）"]
+        A1["bled_disp_en / bled_io_sel<br/>rled_disp_en / rled_io_sel<br/>led_*_config_en + 4×led_cfg_t<br/>xcfg.h:50-81"]
+    end
+    subgraph L2["② 编译期开关层 config_ab5766_le_mic.h"]
+        B1["BSP_LED_EN=1 :30<br/>BSP_DLED_EN=0 :31<br/>BSP_UART_DEBUG_EN=GPIO_PB3 :24"]
+    end
+    subgraph L3["③ BSP LED 驱动层 bsp_led.c/h"]
+        C1["led_cb_t 状态机<br/>led_set_sta_p 只写 bled_sta :197<br/>led_scan 只消耗 bled_sta :246"]
+        C2["led_init / bled_set_on/off<br/>rled_set_on/off / led_charge_on/off"]
+    end
+    subgraph L4["④ GPIO HAL/Driver 层 driver_gpio.c"]
+        D1["gpio_init :15<br/>gpio_set_bits / reset_bits / set_de"]
+    end
+    subgraph L5["⑤ 业务调用层 + 定时器调度层"]
+        E1["wireless_mic_proc :319 切 idle/connected"]
+        E2["func_mic_emit_init :37 / func_adapter_init :58 预设 idle"]
+        E3["bsp_charge_process :110 驱动红灯"]
+        E4["usr_tmr5ms_thread_do :61 每 50ms 调 led_scan"]
+        E5["func_pwroff :407 关机 bled_set_off"]
+    end
+
+    L1 --> L3
+    L2 -->|"#if 包裹"| L3
+    L2 -->|"#if 包裹"| L4
+    L3 --> L4
+    L5 -->|"调公开接口"| L3
+
+    classDef cfg fill:#cfe8ff,stroke:#0d6efd
+    classDef sw fill:#fff3cd,stroke:#ffc107
+    classDef drv fill:#d1e7dd,stroke:#198754
+    classDef hal fill:#f8d7da,stroke:#dc3545
+    classDef biz fill:#e2d9f3,stroke:#6f42c1
+    class A1 cfg
+    class B1 sw
+    class C1,C2 drv
+    class D1 hal
+    class E1,E2,E3,E4,E5 biz
+```
+
+#### B. 各层详解（精确到文件:函数:行号）
+
+**① 配置层 `xcfg_cb` —— 数据，不是代码**
+
+LED 的「用不用、在哪个脚、闪什么图样」全部以位域形式存于运行时配置结构 `xcfg_cb_t`，由 ToolKit 界面写入 `wireless_mic_emit.setting`、经 `prebuild.bat` 生成 `xcfg.bin`，运行时由 `xcfg_init()` 加载：
+
+- 使能与 IO 选择（[xcfg.h:50-53](../../projects/microphone/xcfg.h)）：
+  - `bled_disp_en`（:50，蓝灯使能）、`bled_io_sel`（:51，蓝灯 IO，PA0=160 / PB3=179 / PB4=180…）
+  - `rled_disp_en`（:52，红灯使能）、`rled_io_sel`（:53，红灯 IO）
+- 四套状态图样的「是否自定义 + 图样本体」（[xcfg.h:54-81](../../projects/microphone/xcfg.h)）：每个 `led_cfg_t{redpat,bluepat,unit,cycle}` 子结构前都有一个 `*_config_en` 开关位（`led_pwron_config_en`/`led_pwroff_config_en`/`led_btpair_config_en`/`led_btconn_config_en`）。
+- 充电相关（影响红灯）：`charge_en`（[xcfg.h:26](../../projects/microphone/xcfg.h)）、`charge_working_while_charging`（[xcfg.h:30](../../projects/microphone/xcfg.h)）。
+- 加载点：[bsp_sys.c:202](../../bsp/bsp_sys.c) `bsp_sys_init()` 首行 `xcfg_init(&xcfg_cb, sizeof(xcfg_cb))`，先于一切 LED 初始化。
+- 工具侧来源：[wireless_mic_emit.setting:79-81](../../projects/microphone/Output/bin/Settings/wireless_mic_emit.setting)（`bled_disp_en`/`bled_io_sel`/`rled_disp_en`/`rled_io_sel`）、[xcfg.xm:64-80](../../projects/microphone/Output/bin/xcfg.xm)（`BLED_DISP_EN`/`BLED_IO_SEL`/`RLED_DISP_EN`/`RLED_IO_SEL` 及四套 `config(LED,…)`）。
+
+> **要点**：配置层是纯数据。改灯的「行为」不需要改代码，只改 ToolKit 配置即可——这是 LED 子系统最核心的解耦点。
+
+**② 编译期开关层 —— 决定哪些代码参与编译**
+
+- `BSP_LED_EN=1`（[config_ab5766_le_mic.h:30](../../projects/microphone/config_ab5766_le_mic.h)）：整个 [bsp_led.c](../../bsp/bsp_led.c) 的总开关，`#if BSP_LED_EN` 包裹（[bsp_led.c:5](../../bsp/bsp_led.c)）。
+- `BSP_DLED_EN=0`（[config_ab5766_le_mic.h:31](../../projects/microphone/config_ab5766_le_mic.h)）：数码管/双灯扫描器 `dled_*` 一套不编译（[bsp_led.c:261-348](../../bsp/bsp_led.c) 整段被 `#if BSP_DLED_EN` 排除）。当 `BSP_DLED_EN=0` 时，`led_scan` 才由 50ms 周期驱动；若 `BSP_DLED_EN=1` 则改由 `dled_scan_10ms` 接管（见 D 节调度）。
+- `BSP_UART_DEBUG_EN=GPIO_PB3`（[config_ab5766_le_mic.h:24](../../projects/microphone/config_ab5766_le_mic.h)）：**与 LED 隐式冲突的编译期占用**——PB3 被编译期锁定为 UART0 TX 调试脚，蓝灯再配 PB3 即触发 E 节破缺。
+- IO 端口/引脚宏：`GPIO_PA0=0xA0`、`GPIO_PB3=0xB3`、`GPIO_PB4=0xB4`（[config_define.h](../../projects/microphone/config_define.h)），`GPIO_PORT_GET(x)`（高 4 位判 A/B 口）、`GPIO_PIN_GET(x)`（低 4 位算位掩码）。
+- ③层对配置的展开：[bsp_led.h:6-9](../../bsp/bsp_led.h) `BSP_BLED_PORT=GPIO_PORT_GET(xcfg_cb.bled_io_sel)`、`BSP_BLED_PIN=GPIO_PIN_GET(...)`、红灯同理——**每次访问都实时读 `xcfg_cb`**，故改 IO 无需重编译。
+
+**③ BSP LED 驱动层 `bsp_led.c/h` —— 状态机 + 图样消耗器**
+
+这是解耦的中枢。核心数据结构两个，均在 [bsp_led.h](../../bsp/bsp_led.h)：
+
+- `led_cfg_t{redpat,bluepat,unit,cycle}`（[bsp_led.h:12-17](../../bsp/bsp_led.h)）：**图样是数据**——一个 8 位位图（`bluepat`/`redpat`，bit=亮）、一个 50ms 单位（`unit`）、一个间隔周期（`cycle`）。四份默认 const 表在 [bsp_led.c:9-16](../../bsp/bsp_led.c)（`led_cfg_poweron/poweroff/pairing/connected`）。
+- `led_cb_t{rled_sta,bled_sta,unit,period,offset:init,circle,busy,lowbat,charge_flag,led2_flag}`（[bsp_led.h:19-34](../../bsp/bsp_led.h)）：运行态。**`rled_sta` 是死字段**（见 E 节）。
+
+驱动函数及其行号级职责：
+
+| 函数（文件:行号） | 职责 / 关键行为 |
+|---|---|
+| `led_init` [bsp_led.c:36](../../bsp/bsp_led.c) | `memset led_cb`；若蓝红 IO 相同则 `led2_flag=1`（共脚双色，L40-44）；对蓝灯、红灯各调一次 `led_cfg_init` 把 IO 配成数字输出 GPIO |
+| `led_cfg_init` [bsp_led.c:19](../../bsp/bsp_led.c) | `gpio_init` 设 `OUTPUT+FEN_GPIO+FDIR_SELF+DIGITAL`——**覆盖 UART TX 交叉开关的根因点**（E 节） |
+| `led2_port_out_mode` [bsp_led.c:55](../../bsp/bsp_led.c) | 共脚时靠 `gpio_set_de` 切模拟/数字模式推双色 |
+| `bled_set_on/off` [bsp_led.c:62/77](../../bsp/bsp_led.c) | L64/L79 `if(!xcfg_cb.bled_disp_en) return`（禁用安全保护）；独立脚时 `gpio_set_bits` 高电平点亮 / `gpio_reset_bits` 低电平熄灭；共脚时靠模式切换 |
+| `rled_set_on/off` [bsp_led.c:91/102](../../bsp/bsp_led.c) | 高电平点亮（`gpio_set_bits`）/ `gpio_reset_bits` 熄灭；`static`，仅本文件与 `led_charge_*`/`dled_scan` 用 |
+| `led_charge_on/off` [bsp_led.c:112/122](../../bsp/bsp_led.c) | `on`：`charge_flag=true`，非共脚先 `bled_set_off` 再 `rled_set_on`；`off`：`rled_set_off` + `charge_flag=false` |
+| `led_power_up/down` [bsp_led.c:129/140](../../bsp/bsp_led.c) | 按 `led_*_config_en` 选 xcfg 字段或 const 表，调 `led_set_sta`——**全仓无调用方，死接口**（E 节） |
+| `led_bt_idle` [bsp_led.c:151](../../bsp/bsp_led.c) | 配对态图样（未连接） |
+| `led_w4_end` [bsp_led.c:162](../../bsp/bsp_led.c) | 等 `led_cb.busy`（图样播完） |
+| `led_bt_connected` [bsp_led.c:171](../../bsp/bsp_led.c) | 已连接图样 |
+| `led_set_sta_normal` [bsp_led.c:182](../../bsp/bsp_led.c) | `→ led_set_sta_p(cfg, &led_cb)` |
+| `led_set_sta_p` [bsp_led.c:189](../../bsp/bsp_led.c) | **核心写入**：L197 `s->bled_sta = sta.bluepat`（**只写 bled_sta，从不写 rled_sta**）；L201-206 `circle = unit*8 + period`（`cycle==0xff` 时 `circle=0x7fff` 永久）；L208-209 算 `offset/init` 对齐 tick |
+| `led_scan` [bsp_led.c:214](../../bsp/bsp_led.c) | **核心消耗**：L218 禁用保护；L229 `if(led_cb.charge_flag) return`（充电早退）；L246 `if(s->bled_sta & BIT(bcnt))` 位图消耗 → 调 `bled_set_on/off`（**只读 bled_sta，从不读 rled_sta、从不调 rled_set_***） |
+| `led_set_sta` 宏 [bsp_led.h:36](../../bsp/bsp_led.h) | `#define led_set_sta(cfg) led_set_sta_normal(cfg)` 间接转发 |
+
+**④ GPIO HAL/Driver 层 `driver_gpio.c`**
+
+[driver_gpio.c:15](../../driver/driver_gpio.c) `gpio_init(gpiox, cfg)` 逐位配 `dir/de/fen/fdir/pupd/drv`——这是把 `fen`（功能使能）从「外设交叉开关」改写成「普通 GPIO」的地方，也是 PB3 卡死链路的物理执行点。`gpio_set_bits`（置高，点亮）、`gpio_reset_bits`（置低，熄灭）、`gpio_set_de`（数字/模拟使能，共脚用）是③层唯一直接触碰的三个 GPIO 接口。
+
+**⑤ 业务调用层 + 定时器调度层**
+
+LED 的「何时设何图样、何时扫描」完全由业务层驱动，③层自身是无源的状态机：
+
+- **定时器调度（扫描的节拍源）**：[strong_symbol.c:54-58](../../projects/microphone/strong_symbol.c) `usr_tmr5ms_thread_callback() → usr_tmr5ms_thread_do()` 是 5ms 线程的 STRONG 入口；[bsp_sys.c:61-97](../../bsp/bsp_sys.c) `usr_tmr5ms_thread_do()` 在 L71-77 `#if (BSP_LED_EN && !BSP_DLED_EN)` 下以 `tmr5ms_cnt%10==0` 即**每 50ms** 调一次 `led_scan(tick_get())`。
+- **初始化链**：[bsp_sys.c:200-267](../../bsp/bsp_sys.c) `bsp_sys_init()` 顺序 `xcfg_init`(L202) → … → `led_init()`(L224) → `bsp_charge_init()`(L231) → `printf("%s\n",__func__)`(L264)。唤醒后外设重初始化走 [bsp_sys.c:269-290](../../bsp/bsp_sys.c) `bsp_periph_init()`（L272 `bsp_uart_debug_init`），由 [func_lowpwr.c:263-291](../../functions/func_lowpwr.c) `sfunc_sleep_exit()` L274 调用。
+- **角色进入预设**：[func_mic_emit.c:37-49](../../functions/func_mic_emit.c) `func_mic_emit_init()` L46-48、[func_adapter.c:58-69](../../functions/func_adapter.c) `func_adapter_init()` L66-68，进入角色即 `led_bt_idle()`。
+- **运行期唯一随连接态切 LED 的点**：[wireless_proc.c:319-340](../../modules/wireless/wireless_proc.c) `wireless_mic_proc()` L322 比较 `wireless_mic.connected_sta != sys_cb.disp_sta`，L332-338 `#if BSP_LED_EN` 下 `disp_sta==0 → led_bt_idle()`、否则 `led_bt_connected()`。其上游是 [func_mic_emit.c:143-172](../../functions/func_mic_emit.c) `func_mic_emit_process()` L156 与 [func_adapter.c:166-230](../../functions/func_adapter.c) `func_adapter_process()` L189 调 `wireless_mic_proc()`。
+- **充电红灯链**：[func.c:43-68](../../functions/func.c) `func_process()` L50-65 `#if BSP_CHARGE_EN` 下按 `charge_working_while_charging` 调 `bsp_charge_process()`；[bsp_charge.c:110-169](../../bsp/bsp_charge.c) `bsp_charge_process()` L120 `charge_get_status()`，L124-128 状态变化时 `>= CHARGE_STA_ON_CON_CURR` 调 `led_charge_on()`、否则 `led_charge_off()`——**红灯唯一驱动**。
+- **关机**：[func_lowpwr.c:407-417](../../functions/func_lowpwr.c) `func_pwroff()` L414-416 直接 `bled_set_off()`（不走 `led_power_down` 死接口）。
+
+#### C. led_scan 50ms 闪烁状态机时序
+
+```mermaid
+sequenceDiagram
+    participant TMR as 5ms 硬件定时器
+    participant CB as usr_tmr5ms_thread_callback<br/>strong_symbol.c:54
+    participant DO as usr_tmr5ms_thread_do<br/>bsp_sys.c:61
+    participant SCAN as led_scan<br/>bsp_led.c:214
+    participant CB2 as led_cb_t
+    participant GPIO as bled_set_on/off<br/>bsp_led.c:62/77
+
+    Note over TMR: 每 5ms 触发一次
+    TMR->>CB: 中断回调
+    CB->>DO: usr_tmr5ms_thread_do()
+    DO->>DO: tmr5ms_cnt++ (bsp_sys.c:63)
+    alt tmr5ms_cnt % 10 == 0（每 50ms）
+        DO->>SCAN: led_scan(tick_get()) (bsp_sys.c:75)
+        SCAN->>CB2: if(!bled_disp_en) return (L218)
+        SCAN->>CB2: if(unit==0||circle==0) return (L225)
+        SCAN->>CB2: if(charge_flag) return (L229 充电早退)
+        SCAN->>CB2: tick/50 算 offset (L241-242)
+        alt offset < unit*8 且 offset%unit==0
+            SCAN->>CB2: bcnt = offset/unit (L245)
+            alt bled_sta & BIT(bcnt) == 1
+                SCAN->>GPIO: bled_set_on() (L247)
+            else
+                SCAN->>GPIO: bled_set_off() (L249)
+            end
+        else offset >= unit*8
+            SCAN->>CB2: busy=false, 一次性图样 unit=0 (L253-257)
+        end
+    end
+```
+
+#### D. 闪烁算法原理：位图消耗 + 圆环对齐
+
+`led_cfg_t` 把一次图样压缩成 4 字节，`led_scan` 用「圆环 + 位图」还原成时序亮灭：
+
+1. **圆环长度** `circle`（[bsp_led.c:205](../../bsp/bsp_led.c)）：`circle = unit*8 + period`。前 `unit*8` 段是「图样播放区」（8 个 `unit` 时隙，对应 `bluepat` 的 8 个 bit），后面 `period` 段是「灭灯间隔」。`cycle==0xff` 时 `circle=0x7fff` 表示永久循环（[bsp_led.c:201-203](../../bsp/bsp_led.c)）。
+2. **相位对齐**（[bsp_led.c:208-209](../../bsp/bsp_led.c)）：`offset = (tick/50 + 1) % circle`，把全局 tick 对齐到圆环起点，保证多次 `led_set_sta` 切换图样时相位连续、不跳变。
+3. **位图消耗**（[bsp_led.c:243-251](../../bsp/bsp_led.c)）：`bcnt = offset/unit`（0~7），`if (bled_sta & BIT(bcnt))` 决定亮灭——即 `bluepat` 的第 `bcnt` 位为 1 则该时隙亮。
+4. **举例**：`led_cfg_pairing = {0x00, 0x0f, 2, 2}`（[bsp_led.c:14](../../bsp/bsp_led.c)）→ `bluepat=0x0f`=二进制`00001111`、`unit=2`(100ms)、`circle=2*8+2=18`(900ms)。前 8×100ms=800ms 中，`bcnt` 0~3 位为 1（亮 400ms），4~7 位为 0（灭 400ms），再灭 100ms，循环——即「蓝灯亮 400ms 灭 500ms」。
+
+#### E. 解耦设计要点
+
+1. **图样是数据，不是代码**：`led_cfg_t` 与 `led_cb_t` 分离，`led_set_sta_p` 只搬数据进状态机，`led_scan` 只按数据消耗。新增一种闪法只需新增一份 `led_cfg_t`，不动扫描器。
+2. **`led_set_sta_p` 接 `led_cb_t*` 参数**（[bsp_led.c:189](../../bsp/bsp_led.c)）：`led_set_sta_normal` 再转一手传 `&led_cb`（[bsp_led.c:184](../../bsp/bsp_led.c)）。这一层间接允许将来存在多个 `led_cb_t` 实例（多组灯各扫各的），虽当前只用全局 `led_cb`。
+3. **`led_set_sta` 宏间接**（[bsp_led.h:36](../../bsp/bsp_led.h)）：`#define led_set_sta(cfg) led_set_sta_normal(cfg)`，业务层写 `led_set_sta(…)` 而非直指函数名，便于日后切换实现。
+4. **`charge_flag` 早退**（[bsp_led.c:229](../../bsp/bsp_led.c)）：`led_scan` 一进来 `if(led_cb.charge_flag) return`，把「充电恒亮红灯」从「闪烁扫描」中完全解耦——充电时闪烁扫描直接停摆，红灯由 `led_charge_on/off` 直接管恒亮/恒灭，两条驱动路径互不干扰。
+5. **`led2_flag` 共脚双色**（[bsp_led.c:40-44](../../bsp/bsp_led.c)）：`bled_io_sel==rled_io_sel` 时单引脚靠 `led2_port_out_mode` 切模拟/数字模式推双色。当前板 PB3(蓝)≠PB4(红) 故 `led2_flag=0`，走独立脚路径。
+6. **禁用安全保护**：`bled_set_on/off`、`led_scan` 头部都判 `xcfg_cb.bled_disp_en`（[bsp_led.c:64/79/218](../../bsp/bsp_led.c)），配置层关灯后③层不操作 GPIO，避免「配了灯但 IO 没接」时误动引脚。
+
+#### F. 三个解耦破缺点（实测已确认）
+
+破缺点即「五层隔离被绕过」的地方，前两项是历史遗留的死代码，第三项是引脚资源冲突。
+
+**破缺 1 · `led_power_up/led_power_down` 是死接口**
+
+[bsp_led.c:129/140](../../bsp/bsp_led.c) 两个函数在全仓无任何调用方——开机不调 `led_power_up`，关机走 [func_lowpwr.c:414-416](../../functions/func_lowpwr.c) `func_pwroff()` 直接 `bled_set_off()`。即 `xcfg_cb.led_pwron_config_en`/`led_pwroff_config_en` 及对应图样 `led_poweron/led_poweroff`（[xcfg.h:54-67](../../projects/microphone/xcfg.h)）**实际不生效**。ToolKit 界面里「开机/关机闪灯」配置项是空操作。若要恢复，需在 `bsp_sys_init` 或 `func_pwroff` 中补调用点。
+
+**破缺 2 · `rled_sta` 是死字段 → 红灯无闪烁机制**
+
+- `led_set_sta_p`（[bsp_led.c:197](../../bsp/bsp_led.c)）只写 `s->bled_sta = sta.bluepat`，**从不写 `s->rled_sta`**；`rled_sta`（[bsp_led.h:20](../../bsp/bsp_led.h)）在全仓无任何写入点。
+- `led_scan`（[bsp_led.c:246](../../bsp/bsp_led.c)）只读 `s->bled_sta & BIT(bcnt)` 调 `bled_set_on/off`，**从不读 `rled_sta`、从不调 `rled_set_on/rled_set_off`**。
+- 后果：所有 `led_bt_idle`/`led_bt_connected`/`led_power_up`/`led_power_down` 设的图样（哪怕 `redpat` 非 0）只影响蓝灯，**红灯纹丝不动**。红灯唯一驱动是充电链的 `led_charge_on/off`（恒亮/恒灭），**无闪烁**。
+
+> 若后续需红灯闪烁（充电异常、低电告警），须新增驱动：在 `led_set_sta_p` 写 `s->rled_sta`，并在 `led_scan` 的 `charge_flag` 早退分支外另开红灯位图消耗分支（或单独加红灯扫描入口）。属新功能，需单独评审，见 [../plan/AB5766_LE_Mic_分阶段实施计划.md](../plan/AB5766_LE_Mic_分阶段实施计划.md) 阶段 2 B 节、6.4 风险表「红灯无闪烁机制」。
+
+**破缺 3 · `led_init` 的 `gpio_init` 覆盖 UART TX 交叉开关 → PB3 蓝灯卡死**
+
+这是唯一**跨层破坏隔离**的破缺：③层的 `led_cfg_init` 经④层 `gpio_init` 把引脚从②层 `BSP_UART_DEBUG_EN` 建立的「UART 外设功能」改写成「普通 GPIO」，导致 UART0 TX 物理通路失效。
+
+```mermaid
+flowchart TD
+    P1["编译期 config_ab5766_le_mic.h:24<br/>BSP_UART_DEBUG_EN = GPIO_PB3"]
+    P2["启动早期 strong_symbol.c:66<br/>uart_debug_init_callback()"]
+    P3["bsp_uart_debug.c:8 bsp_uart_debug_init()<br/>L27-28 交叉开关映射 UART0RX/TX → PB3<br/>gpio_func_mapping_config(..., GPIO_CROSSBAR_OUT_UART0TX)"]
+    P4["bsp_sys.c:202 bsp_sys_init()<br/>xcfg_init() 加载 bled_io_sel=179(PB3)"]
+    P5["bsp_sys.c:213 pmu_init()<br/>打印 lock wireless_mic comm … vddbt_capless_en:1"]
+    P6["bsp_sys.c:224 led_init()<br/>bsp_led.c:47 led_cfg_init(BSP_BLED_PIN,...)"]
+    P7["bsp_led.c:19 led_cfg_init<br/>gpio_init 设 FEN_GPIO + FDIR_SELF + DIGITAL"]
+    P8["driver_gpio.c:15 gpio_init<br/>逐位重写 fen → 清掉 UART TX 交叉开关映射"]
+    P9["driver_uart.c:150 uart_baud_config<br/>while ((uartx->con & UARTxCON_TXPND) == 0)"]
+    P10["bsp_sys.c:264 printf('bsp_sys_init')"]
+    DEAD["putchar 忙等待 TXPND 不翻转<br/>系统卡死在 vddbt_capless_en:1 之后"]
+
+    P1 --> P2 --> P3
+    P4 --> P5 --> P6 --> P7 --> P8
+    P8 -->|"TX 物理引脚已非 UART 外设引脚"| P9
+    P10 --> P9 --> DEAD
+
+    classDef sw fill:#fff3cd,stroke:#ffc107
+    classDef uart fill:#cfe8ff,stroke:#0d6efd
+    classDef led fill:#d1e7dd,stroke:#198754
+    classDef hal fill:#f8d7da,stroke:#dc3545
+    classDef dead fill:#343a40,stroke:#000,color:#fff
+    class P1 sw
+    class P2,P3,P9 uart
+    class P4,P5,P6,P7 led
+    class P8 hal
+    class P10,DEAD dead
+```
+
+**为何日志正好停在 `vddbt_capless_en:1`**：`bsp_sys_init()` 顺序是 `pmu_init()`（打印 `lock wireless_mic comm` … `vddbt_capless_en:1`，全部在 `led_init()` 之前完成）→ `led_init()`（L224，破坏 PB3 的 UART TX 映射，本身无打印）→ … → `printf("%s\n",__func__)`（L264，打印 `bsp_sys_init`）。PMU 末行打印完后紧接着 `led_init()` 破坏引脚，下一处 printf（L264）的 putchar 经 UART0 发送时 `TXPND` 无法翻转（[driver_uart.c:150](../../driver/driver_uart.c) 忙等），死锁，故 `bsp_sys_init` 这行不再出现，与实测一致。
+
+**解决路径**（二选一，均不改③④层代码）：
+
+1. **蓝灯不配 PB3**，改用其他空闲引脚——实测改到 PA0（`bled_io_sel=160`）即恢复，仅改运行时配置无需重编译。
+2. **若必须用 PB3 作蓝灯**，先把编译期 `BSP_UART_DEBUG_EN` 从 `GPIO_PB3` 改到 PA0/PA1/PA4 等并重编译，让出 PB3。
+
+> 该破缺的根因是**②层与③层对同一物理引脚没有仲裁**——`BSP_UART_DEBUG_EN`（编译期）和 `bled_io_sel`（运行时）分属两个配置空间，互不感知。彻底修法是在 `led_init` 调 `led_cfg_init` 前加一道「目标 IO 与 `BSP_UART_DEBUG_EN` 相同则拒配」的断言，把隐式冲突显式化。当前以「文档约束 + ToolKit 不选 PB3」规避。
+
+#### G. 一句话总结
+
+LED 子系统把「行为（图样）」做成 `xcfg_cb` 里的纯数据、把「时序（扫描）」交给 50ms 定时器、把「电平」下沉到 GPIO Driver，三层各司其职——这是它**解耦得最好**的部分；而 `led_power_*` 死接口、`rled_sta` 死字段、PB3 引脚冲突，则是它**解耦被破坏**的三处明证，修改 LED 行为前务必先对照本附录确认未踩这三点。
+
 ### 第 8 章 · Module 层：算法的"小工厂"
 
 **Module 层** 是 SDK 的"业务工具箱"。每个 Module 通常是一个"独立问题域"：
