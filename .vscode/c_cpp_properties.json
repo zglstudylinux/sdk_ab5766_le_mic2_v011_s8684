@@ -1,0 +1,39 @@
+{
+    // AB5766 麦克风固件 IntelliSense 配置。详见 docs/plan/build-with-vscode.md
+    // compilerPath 指向 RV32-V3 工具链；如安装位置不同，请改为此机 bin\riscv32-elf-gcc.exe 的绝对路径。
+    "configurations": [
+        {
+            "name": "AB5766",
+            "includePath": [
+                "${workspaceFolder}/projects/microphone",
+                "${workspaceFolder}/header",
+                "${workspaceFolder}/libs",
+                "${workspaceFolder}/libs/ble",
+                "${workspaceFolder}/libs/cpu",
+                "${workspaceFolder}/libs/usb",
+                "${workspaceFolder}/driver",
+                "${workspaceFolder}/modules/fota",
+                "${workspaceFolder}/modules/utils",
+                "${workspaceFolder}/modules/ble",
+                "${workspaceFolder}/modules/audio/dec",
+                "${workspaceFolder}/projects/microphone/production_test",
+                "${workspaceFolder}/projects/microphone/production_test/iodm",
+                "${workspaceFolder}/projects/microphone/production_test/tbox",
+                "${workspaceFolder}/functions",
+                "${workspaceFolder}/bsp",
+                "${workspaceFolder}/modules",
+                "${workspaceFolder}/modules/wireless"
+            ],
+            "compilerPath": "D:/software_download/work/rv32-toolchain_v1.5.9/rv32-toolchain_v1.5.9/install/RV32-V3/bin/riscv32-elf-gcc.exe",
+            "compilerArgs": [
+                "-march=rv32imc_zba_zbb_zbc_zbs_zca_zcb_zcmp_xbs1",
+                "-ffunction-sections",
+                "-mjump-tables-in-text"
+            ],
+            "intelliSenseMode": "gcc-x86",
+            "cStandard": "c11",
+            "cppStandard": "c11"
+        }
+    ],
+    "version": 4
+}

@@ -13,6 +13,7 @@
 ## 构建与生成产物
 
 - 构建入口是 Code::Blocks 工程 [projects/microphone/app.cbp](projects/microphone/app.cbp)，其中仅定义 `Debug` 目标，并配置使用 `riscv32-v3` 编译器。在已配置厂商 RV32 环境的 Code::Blocks 中打开该工程并构建 `Debug`。
+- 除 Code::Blocks GUI 外，也可用命令行脚本 [projects/microphone/build.ps1](projects/microphone/build.ps1) 构建：它解析 `app.cbp` 并复现上述 Debug 流程，产物路径与 GUI 一致。在仓库根运行 `powershell -ExecutionPolicy Bypass -File projects/microphone/build.ps1`（支持 `-Clean`/`-Rebuild`/`-ToolchainRoot`）。VSCode 中 `Ctrl+Shift+B` 已绑定到该脚本（见 `.vscode/tasks.json`），IntelliSense 配置见 `.vscode/c_cpp_properties.json`。完整说明见 [docs/plan/build-with-vscode.md](docs/plan/build-with-vscode.md)。工具链根目录默认从 `%APPDATA%\codeblocks\default.conf` 中 `riscv32_v3` 的 `MASTER_PATH` 自动探测，也可用 `-ToolchainRoot` 或环境变量 `RV32_TOOLCHAIN_ROOT` 指定。
 - 该目标使用 `-march=rv32imc_zba_zbb_zbc_zbs_zca_zcb_zcmp_xbs1`，链接 `libs/` 下预编译的平台、C 运行时和蓝牙协议栈静态库，并将 [projects/microphone/ram.ld](projects/microphone/ram.ld) 预处理为链接器输入。
 - 构建输出位于 `projects/microphone/Output/`。常规固件产物包括 `Output/bin/app.rv32`、`app.bin`、`app.dcf`、`download.xm` 和 `map.txt`。
 - 工程会在编译前执行 `Output/bin/prebuild.bat`。该脚本依赖 `riscv32-elf-xmaker` 生成 `res` 和 `xcfg` 产物，并将生成的 `effect.c`/`effect.h` 复制到工程目录。
