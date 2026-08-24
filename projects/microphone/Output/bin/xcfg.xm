@@ -32,7 +32,7 @@ config(CHECK, "充电使能", "是否打开充电功能", CHARGE_EN, 1);
 config(CHECK, "涓流充电使能", "是否使能涓流充电", CHARGE_TRICK_EN, 1, CHARGE_EN);
 config(CHECK, "插入DC复位", "DC IN时，复位", CHARGE_DC_IN_RST, 1, CHARGE_EN);
 config(CHECK, "退出充电自动开机", "退出充电自动开机", POWERON_VUSB_OUT_EN, 1, CHARGE_EN);
-config(CHECK, "边充电边工作使能", "需要关闭 插入DC禁止软开机", CHARGE_WORKING_WHILE_CHARGING, 0, CHARGE_EN);
+config(CHECK, "边充电边工作使能", "需要关闭 插入DC禁止软开机", CHARGE_WORKING_WHILE_CHARGING, 1, CHARGE_EN);
 config(LIST, "充电截止电流", "选择充电截止电流", CHARGE_STOP_CURR, 16, "0mA", "2.5mA", "5mA", "7.5mA", "10mA", "12.5mA", "15mA", "17.5mA", "20mA", "22.5mA", "25mA", "27.5mA", "30mA", "32.5mA", "35mA", "37.5mA", 12, CHARGE_EN);
 config(LIST, "恒流充电电流", "恒流充电（电池电压大于2.9v）电流", CHARGE_CONSTANT_CURR, 33, "5mA", "10mA", "15mA", "20mA", "25mA", "30mA", "35mA", "40mA", "45mA", "50mA", "55mA", "60mA", "65mA", "70mA", "75mA", "80mA", "85mA", "90mA", "95mA", "100mA", "105mA", "110mA", "115mA", "120mA", "125mA", "130mA", "135mA", "140mA",, "145mA", "150mA", "155mA", "160mA", "165mA", 7, CHARGE_EN);
 config(LIST, "涓流充电电流", "涓流充电（电池电压小于2.9v）电流", CHARGE_TRICKLE_CURR, 8, "5mA", "10mA", "15mA", "20mA", "25mA", "30mA", "35mA", "40mA", 3, CHARGE_TRICK_EN);

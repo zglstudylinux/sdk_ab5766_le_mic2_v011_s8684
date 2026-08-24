@@ -121,6 +121,11 @@ void func_mic_emit_message(u16 msg)
 //        }
 //        wireless_tx_voice_rm_en(user_private_ctl_flag.voice_rm_en); //消原音
         break;
+
+    case MSG_TEST_X:
+        printf("Test X triggered\n");
+        break;
+
 #if WARNING_MIC_MIX_WAV_PLAY_EN
     case EVT_TEST_WAV:
         printf("EVT_TEST_WAV\n");

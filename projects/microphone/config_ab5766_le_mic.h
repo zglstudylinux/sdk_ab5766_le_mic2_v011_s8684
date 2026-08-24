@@ -139,7 +139,7 @@
  *****************************************************************************/
 //混响算法
 #define ECHO_EN                                 (WIRELESS_MIC_ECHO_EN)
-#define ECHO_LEVEL			                    70              //attenuation  range:0-90
+#define ECHO_LEVEL                              70              //attenuation  range:0-90
 #define ECHO_DRY_USER                           32767           //干度 range:0-32767
 #define ECHO_WET_USER                           20000           //湿度 range:0-32767
 #define ECHO_DELAY_MAX_LEVEL                    9               //echo延迟等级划分，按照固定的间隔划分成这么多等级，用于后续等级加减

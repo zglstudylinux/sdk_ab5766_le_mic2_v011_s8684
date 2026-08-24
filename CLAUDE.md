@@ -4,7 +4,8 @@
 
 ## 回复语言
 
-- 与用户交流时，所有回复必须使用中文。此规则长期生效，适用于本项目今后的所有对话与回答，无论用户使用何种语言提问，均以中文回复。
+- 与用户交流时，所有回复必须使用中文，且今后一律如此（包括解释、总结、报错说明、状态汇报、提问等所有面向用户的输出，均用中文，不混用英文成段）。
+- 代码、宏名、函数名、文件路径、命令、日志原文等保持原样，不翻译；仅在需要解释其含义时用中文说明。
 
 ## 项目概述
 
@@ -31,6 +32,46 @@
 - `modules/` 包含可复用的协议和信号处理单元，包括无线麦克风传输/控制、音频处理/EQ/DRC/增益、编解码器、语音效果、BLE profile 数据、FOTA 和调试工具。`functions/` 将用户行为和消息映射到这些模块。
 - [projects/microphone/strong_symbol.c](projects/microphone/strong_symbol.c) 覆盖预编译 SDK 库中的弱函数，并提供平台回调。需要有意挂接库行为时，应在此处实现，而不是尝试修改预编译库。
 - 链接段放置至关重要。应用、BSP 和功能层代码中的 `AT(...)` 标注，与预处理后的 [projects/microphone/ram.ld](projects/microphone/ram.ld) 共同协调 RAM/Flash 放置。移动时序或内存敏感代码时，保留这些标注。
+
+## 当前实测状态与已知限制
+
+本节记录当前板卡实测得到、但无法从代码或 git 历史直接推断的事实。证据等级参照 [docs/SDK/AB5766_LE_Mic_音频算法测试快速入门.md](docs/SDK/AB5766_LE_Mic_音频算法测试快速入门.md) 第 1 节。修改这些路径前先确认本节约束没有被违反。
+
+### 当前实测链路
+
+- 已验证的声学链路：手机外放音乐 → TX 麦克风采集 → 专有无线链路 → RX → 耳机正常听音。这证明 TX 采集、无线传输、RX 解码、DAC/耳机输出路径基本可用。
+- **只能证明以上路径**，不证明 USB Mic、不证明算法客观指标（RMS/频谱/失真）已通过。耳机听音正常 ≠ USB Mic 正常。
+
+### 已完成测试
+
+- **静音**：通过按键/`MSG_VOL_MUTE` 触发，听感上静音与恢复正常。
+- **Soft Gain 等级与渐变**：等级升降与渐变在听感上可辨识。
+- **MAGIC**：切换档位在听感上可辨识。
+- 上述三项当前只到「听感证据 + 控制面日志证据」等级，未量化 RMS/频谱。不要把控制面日志或听感写成「算法客观指标已通过」。
+
+### 当前板卡按键硬件
+
+- 当前开发板只有 `KEY_ID_PP`、`KEY_ID_K1`、`KEY_ID_K2` 三个有效按键，无 `KEY_ID_K3`。
+- 项目未定义 `WIRELESS_MIC_K12_KEY_EN`，因此编译使用 [projects/microphone/port/port_key.c](projects/microphone/port/port_key.c) 的非 K12 按键表。
+- **MAGIC 入口**：非 K12 表中 `KEY_ID_K2` 的「长按抬起」列（事件索引 3，`KEY_LONG_UP`，即长按后松手触发）映射到 `MSG_CHANGE_MAGIC`。注意是松手时触发，不是按下时、也不是双击。
+- K12 配置下才是 K3 单击切换 MAGIC；当前板卡不适用 K3 描述。修改或引用按键入口时按当前非 K12 表为准。
+- **按键消息表枚举值上限**：`mic_emit_key_msg_tbl` 的元素类型是 `u8`，[bsp/bsp_key.c](bsp/bsp_key.c) 的 `key_set_msg_tbl` 按字节 `memcpy` 拷贝，`bsp_key_get_msg` 按 `u8` 取值返回。因此经按键表分派的消息，其枚举值必须 < 0x100（0~255），否则写入/读取被截断为低 8 位，悄无声息变成 `MSG_NO`。放在 `MSG_SYS_MAX(0x7ff)` 之后的 `EVT_*` 类消息（如原 `EVT_TEST_X=0x800`）不可放入按键表。实测踩坑记录见 [docs/SDK/AB5766_嵌入式固件SDK_架构导览.md](docs/SDK/AB5766_嵌入式固件SDK_架构导览.md) 第 22 章。
+
+### USB Mic 已知限制
+
+- USB Mic 是**电脑采集输入**方向（RX 作为 USB Audio 麦克风端点，供电脑录音），不是 USB 播放输出方向。不要期待从 USB 播放到耳机。
+- `ADAPTER_USB_MIC_RX_EN=1` 只是编译期开关。实际运行还需 `xcfg_cb.wireless_adapter_en` 成立（进入 Adapter/RX 角色）并完成 USB 枚举，见 [bsp/bsp_sys.c](bsp/bsp_sys.c) 中 `dev_init(1)` 的条件。
+- 当前用户 USB Mic **尚未通过**。后续算法测试先用 RX 耳机完成，USB Mic 故障排查放到算法测试之后，作为独立步骤；不在算法 A/B 中改动 USB 相关宏。
+- 排查 USB Mic 时按「角色 → 枚举 → PCM → 电脑端」分层收集证据，不得未经证据断定根因。
+
+### 测试纪律与算法边界
+
+- 允许在同一次变更中同时修改多个宏和参数（例如为解决 Flash 溢出而一次性关闭一组功能宏）。每次改动独立 Debug 构建/刷写/恢复，保留 `config_diff.txt`、构建日志、`map.txt`、UART、录音，确保可回溯每个变更集。
+- 需要精确归因「某个宏/参数对音质的影响」的算法 A/B 听感对比时，仍建议尽量控制变量（单宏对比），但不再强制单宏；改动多宏时在 `config_diff.txt` 中记录每个宏的取值与预期影响，便于区分叠加效应。
+- Dump（`WIRELESS_DUMP_EN`）需要时单独建诊断构建，测完恢复 0，不影响实时音频基线。
+- Room Reverb 与 ECHO 同时开启时，源码中 Room Reverb 会被自动 mute（见 [modules/voice/room_reverb.c](modules/voice/room_reverb.c)）；测试 Room Reverb 必须先确认 ECHO 关闭。
+- AGC 当前源码标注「调试中」，可能存在实现/链接风险，应放在算法测试最后，先做构建/链接验证再决定是否刷写。
+- 预编译库核心（LC3S、PLC、PACC 内核、AGC 内部阈值等）只记录公开 API、包装层、调用时机和输入输出，不从函数名推断内部数学实现。
 
 ## 改动定位
 

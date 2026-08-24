@@ -14,6 +14,7 @@ enum{
     MSG_VOL_UP,
     MSG_VOL_DOWN,
     MSG_VOL_MUTE,
+    MSG_TEST_X,                     //测试消息(经按键表分派,值需 <0x100 以适配 u8 消息表)
 
     MSG_SYS_1S = 0x700,
     MSG_SYS_500MS,
