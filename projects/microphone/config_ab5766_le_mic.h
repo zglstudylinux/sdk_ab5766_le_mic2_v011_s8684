@@ -21,7 +21,7 @@
 #define PMU_CFG_VBAT                    PMU_CFG_VBAT_4V2        //VBAT供电类型选择
 #define WK0_10S_RESET                   0                       //WK pin 10秒复位功能
 #define SYS_PWROFF_MODE                 PWROFF_MODE2            //软关机模式选择，模式1 VDDIO掉电，模式2 VDDIO不掉电
-#define BSP_UART_DEBUG_EN               GPIO_PB3                //串口打印调试使能[Baud=1500000]
+#define BSP_UART_DEBUG_EN               GPIO_PA4                //串口打印调试使能[Baud=1500000]
 #define BSP_UART_TRANSFER_EN            1                       //UART1 双线串口收发使能(PA0=TX, PA1=RX)
 #define BSP_UART_TRANSFER_BAUD          115200                  //UART1 transfer 波特率[8N1]
 #define BSP_ADKEY_EN                    1                       //AD按键使能[Default: PB0]
@@ -117,13 +117,13 @@
 #define WIRELESS_MIC_DNR_FRE_DELAY              WIRELESS_MIC_DNR_FRE_EN * 720   //发射端DNR_FRE运算时间
 #define WIRELESS_MIC_32K_EN                     1               //是否使能mic 32k采样率
 #define WIRELESS_MIC_SRC_DELAY                  WIRELESS_MIC_32K_EN*200//EQ_DRC运算时间
-#define WIRELESS_MIC_AINS4_32K_EN               1
+#define WIRELESS_MIC_AINS4_32K_EN               0
 
 //适配器端私有配置
 #define ADAPTER_DAC_OUTPUT_EN                   1               //适配器是否支持dac输出MIC音频
 #define ADAPTER_USB_SPK_TX_EN                   0               //发射端是否开启usb spk功能（下行音频，不支持）
-#define ADAPTER_USB_MIC_RX_EN                   0               //接收端是否开启usb mic功能（上行音频，不支持）
-#define ADAPTER_MIX_DRC_EN                      1               //混音DRC功能(用于一拖二混音)
+#define ADAPTER_USB_MIC_RX_EN                   1               //接收端是否开启usb mic功能（上行音频，不支持）
+#define ADAPTER_MIX_DRC_EN                      0               //混音DRC功能(用于一拖二混音)
 #define ADAPTER_MIX_DRC_DELAY                   ADAPTER_MIX_DRC_EN*250//mix drc运算时间
 #define ADAPTER_FREQ_SHIFT_EN                   0               //适配器是否开启 移频（防啸叫）
 #define ADAPTER_HUART_AUDIO_OUTPUT_EN           0               //适配器是否支持Huart音频输出
@@ -184,9 +184,9 @@
 /*****************************************************************************
  * Module    : 调音工具配置
 ******************************************************************************/
-#define EQ_DRC_DBG_IN_UART                      1          //是否使能UART在线调节EQ
-#define EFFECT_DBG_ADJUST_EN                    1          //是否使能音效离线调试
-#define EFFECT_DBG_ADJUST_IN_UART               1          //是否使能UART在线调试音效,该功能需要打开EFFECT_DBG_ADJUST_EN和EQ_DBG_IN_UART
+#define EQ_DRC_DBG_IN_UART                      0          //是否使能UART在线调节EQ
+#define EFFECT_DBG_ADJUST_EN                    0          //是否使能音效离线调试
+#define EFFECT_DBG_ADJUST_IN_UART               0          //是否使能UART在线调试音效,该功能需要打开EFFECT_DBG_ADJUST_EN和EQ_DBG_IN_UART
 
 /*****************************************************************************
  * Module    : User按键配置 (可以同时选择多组按键)

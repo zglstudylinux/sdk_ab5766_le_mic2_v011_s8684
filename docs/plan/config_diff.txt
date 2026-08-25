@@ -1,0 +1,93 @@
+# USB Mic 测试 config_diff.txt
+
+Git 提交: 1d01aa3 (branch_01)
+日期: 2026-04-27
+
+## 变更集 1：打开 USB Mic（步骤 0）
+
+文件: projects/microphone/config_ab5766_le_mic.h
+
+| 宏 | 原值 | 新值 | 说明 |
+|---|---|---|---|
+| ADAPTER_USB_MIC_RX_EN (line 125) | 0 | 1 | 打开接收端 USB Mic 功能（上行音频，电脑录音） |
+
+派生宏（自动生效，未手改）:
+- UDE_MIC_EN = ADAPTER_USB_MIC_RX_EN = 1
+- UDE_ENUM_TYPE = 0 + 0 + 0 + UDE_MIC_EN*0x08 = 0x08（仅 MIC 枚举）
+
+未改动（保持原值）:
+- ADAPTER_USB_SPK_TX_EN = 0（USB 下行播放，不支持，不测）
+- ADAPTER_DAC_OUTPUT_EN = 1（耳机同源佐证）
+- UDE_STORAGE_EN = 0、UDE_HID_EN = 0
+
+## 变更集 2：关三个 UART 调音调试宏腾 Flash（步骤 0 溢出后）
+
+背景: 变更集 1 构建 CODE SIZE 124 KB，超过 120 KB 上限（Code overlap），溢出 4 KB。
+
+| 宏 | 原值 | 新值 | 说明 |
+|---|---|---|---|
+| EQ_DRC_DBG_IN_UART (line 187) | 1 | 0 | 关 UART 在线调 EQ |
+| EFFECT_DBG_ADJUST_EN (line 188) | 1 | 0 | 关音效离线调试 |
+| EFFECT_DBG_ADJUST_IN_UART (line 189) | 1 | 0 | 关 UART 在线调音效（依赖前两者） |
+
+## 变更集 3：关混音 DRC 腾 Flash（变更集 2 后仍 124 KB 溢出）
+
+背景: 变更集 2 构建 CODE SIZE 仍 124 KB（app.rv32 196.11 KB），仍未降到 120 KB 内。
+
+| 宏 | 原值 | 新值 | 说明 |
+|---|---|---|---|
+| ADAPTER_MIX_DRC_EN (line 126) | 1 | 0 | 关一拖二混音 DRC（单路收听不受影响，双链路走简单求和） |
+
+## 变更集 4：关 AINS4_32K 降噪腾 Flash（变更集 3 后仍 124 KB 溢出）
+
+背景: 变更集 3 构建 CODE SIZE 仍 124 KB。AINS4_32K 的预编译库部分(ains4_dongle.o/zoom_fft.o，约 12KB code+rodata)是当前最大 Flash 占用项，且属 TX 端降噪，与 RX 端 USB 链路无关（依据 docs/SDK/AB5766_map文件解析指南.md 15.3）。
+
+| 宏 | 原值 | 新值 | 说明 |
+|---|---|---|---|
+| WIRELESS_MIC_AINS4_32K_EN (line 120) | 1 | 0 | 关 TX 端重型 AINS4 降噪（保留 32K 采样 + SRC），不影响 RX 端 USB 链路 |
+
+## 构建结果（步骤 0 完成）
+
+| 变更集 | 构建结果 |
+|---|---|
+| 1（仅 EN=1） | CODE SIZE 124 KB，postbuild 失败：`Code [0x0-0x1EFFF] and [0x1E000-...] overlap!`（超 120 KB 上限 4 KB） |
+| 2（+关三调试宏） | CODE SIZE 仍 124 KB，失败（app.rv32 196.11 KB） |
+| 3（+关 ADAPTER_MIX_DRC_EN） | CODE SIZE 仍 124 KB，失败（app.rv32 194.96 KB） |
+| 4（+关 WIRELESS_MIC_AINS4_32K_EN） | **CODE SIZE 112 KB，构建成功**：app.rv32 179.16 KB、app.bin 97.52 KB、app.dcf 166.48 KB |
+
+### map.txt 符号验证（变更集 4 产物）
+
+USB 功能代码已真实链接（来自预编译 libplatform.a，非 strong_ble.o 空 stub）：
+
+- usb_detect @ 0x00017800、usb_device_process @ 0x00017972、usb_mic_in_audio_input @ 0x000179b8（应用层）
+- usbchk_connect @ 0x0001183e、usb_isr @ 0x00011832 ← libplatform.a(usb_comm.o)
+- usb_dev_isr @ 0x00011824 ← libplatform.a(usb_device_run_loop.o)
+- ude_control_flow @ 0x00017e4c、ude_ep_reset @ 0x00017e32、ude_run_loop_execute @ 0x00018260 ← libplatform.a(usb_device_enum.o)
+- ude_isoc_tx_process @ 0x00018376、usbmic_len_get @ 0x000182f8、usbmic_sdadc_process @ 0x00018304 ← libplatform.a(usb_device_audio.o)
+- usb_device_enter @ 0x1000ba56、usb_device_exit @ 0x1000b9e0
+
+strong_ble.o 的 6 个 USB 空 stub（usb_init/ude_control_flow/ude_ep_reset/ude_isoc_tx_process/usb_isr/usb_dev_isr）已消失。
+
+### 固件产物身份（E2，变更集 5 之后，调试串口=PA4）
+
+| 产物 | SHA256 | 大小 |
+|---|---|---|
+| app.dcf | A88FCAAD505D590FB5D11700A56DC55AFDB54DCA52FDE59EC3F5175C81030B11 | 170471 B |
+| app.bin | 3077AEF607F6E2A63AAA0C701559F6FA9D25F3FA7E671CFF34D7896402B40F09 | 99859 B |
+| app.rv32 | 9F9CB9D6D2B0A8A34E5E802A911F6463BB12D47029BA62B36EAFD53EA9F902AA | 183464 B |
+| map.txt | 7E8F88847FF797758B5846AA55DB4116FAC2CEA6227FAB29D9C6357EE0028F9E | 311334 B |
+
+## 变更集 5：调试串口 PB3 → PA4（避免与 USB DP/DM 冲突）
+
+背景: PB3/PB4 是 USB 的 DP/DM 数据线，调试串口不能再占 PB3，否则与 USB 枚举冲突。
+
+| 宏 | 原值 | 新值 | 说明 |
+|---|---|---|---|
+| BSP_UART_DEBUG_EN (line 24) | GPIO_PB3 (0xB3) | GPIO_PA4 (0xA4) | 调试串口 UART0 交叉开关改到 PA4（1500000/8N1/单线不变） |
+
+- 派生：UART_DEBUG_PORT_SEL = GPIOA_REG、UART_DEBUG_PIN_SEL = 1<<4
+- PA4 冲突检查：RX 板 wireless_adapter.setting 蓝/红灯 bled_io_sel/rled_io_sel=160(PA0)；UART1 transfer 用 PA0/PA1；AD 按键 PB0；充电 PB4。PA4 空闲，无冲突。
+
+## 回滚记录
+
+（测完填写：恢复 ADAPTER_USB_MIC_RX_EN 1→0 及上述腾空间宏；BSP_UART_DEBUG_EN 是否回 PB3 按需决定）
