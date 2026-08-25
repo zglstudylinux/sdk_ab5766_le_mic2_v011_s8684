@@ -1010,6 +1010,26 @@ TX SDADC(32k) → SRC(32k→48k) → LC3S 编码 → 无线 → LC3S 解码(48k/
 - 接收端（RX）只是把解码出的 48 kHz / 单声道 s16 PCM **原样**交给 `usb_mic_in_audio_input`（双链路 [mic_proc.c:474](../../modules/wireless/mic_proc.c#L474)，单链路 [mic_proc.c:509](../../modules/wireless/mic_proc.c#L509)），不自行决定采样率。
 - USB 端点向主机**声明**的格式（描述符）位于预编译库 `usb_device_table.o`（`desc_config_mic_stream`），应用层不可见；应用层能保证的是「送入的 PCM 是 48k / 单声道 / s16」，与主机看到的格式一致。
 
+### 15.6 UDE_* 四个设备功能的实现状态矩阵（哪些能用、哪些是空壳）
+
+`UDE_ENUM_TYPE` 的四个 bit 分别对应四类 USB 设备功能（[config:182](../../projects/microphone/config_ab5766_le_mic.h#L182)），但**「能枚举出接口」≠「功能已实现」**。经代码核对，四者的应用层实现状态差异很大：
+
+| 宏 | 当前值 | 应用层实现 | 打开后能验证什么 | 结论 |
+|---|---|---|---|---|
+| `UDE_MIC_EN`（=`ADAPTER_USB_MIC_RX_EN`） | 1 | **完整**：`usb_mic_in_audio_input` 有调用点（[mic_proc.c:474](../../modules/wireless/mic_proc.c#L474)/[509](../../modules/wireless/mic_proc.c#L509)）+ 预编译实现（`libplatform.a(usb_device_audio.o)`） | 全链路录音（已实测四层 Pass） | ✅ 唯一可用 |
+| `UDE_SPEAKER_EN`（=`ADAPTER_USB_SPK_TX_EN`） | 0 | 命令骨架：`wireless_rx_usb_cmd` 各 case 动作被注释（`bsp_set_volume` 注释），无 USB 下行 PCM 路径 | 仅枚举出 speaker 接口 | ❌ 空壳 |
+| `UDE_HID_EN` | 0 | `usb_device_hid_send` 不存在（[api_usb.h](../../libs/cpu/api_usb.h) 无声明），HID 发送全在注释 | 仅枚举出 HID 接口 | ❌ 空壳 |
+| `UDE_STORAGE_EN` | 0 | **空**：无任何 MSC/Flash 扇区读写代码，连骨架都没有 | 仅枚举出磁盘接口（不挂载） | ❌ 空壳 |
+
+要点：
+
+- **`UDE_MIC_EN`**：唯一实现完整的设备功能，且已实测通过（见 15.4）。注意它还有 PLC pitch 参数的隐藏副作用——`#if !ADAPTER_USB_MIC_RX_EN` 会切换 `PITCH_MIN/PITCH_MAX`（[plc_soft_api.h:15](../../modules/voice/plc_soft_api.h#L15)），所以它不只是 USB 开关。
+- **Speaker / HID / Storage**：注释「不支持」是准确的，三者应用层要么残缺、要么完全缺失：
+  - **Speaker**：无线命令骨架在（[wireless_cmd.h:99-113](../../modules/wireless/wireless_cmd.h#L99-L113) 的 `wireless_music_*` 宏、[wireless_cmd_api.c:206-249](../../modules/wireless/wireless_cmd_api.c#L206-L249) 的 `wireless_rx_usb_cmd`），但接收端动作被注释，且无 USB 下行 PCM 数据流；
+  - **HID**：HID 按键码常量在（[wireless_cmd.h:6-22](../../modules/wireless/wireless_cmd.h#L6-L22)），但发送函数 `usb_device_hid_send` 在仓库不存在；
+  - **Storage**：连骨架都没有，仓库无任何 USB Mass Storage / Flash 扇区读写代码。
+- 若产品需要 Speaker/HID/Storage 三者之一，属**新功能开发**（先确认预编译库是否暴露对应 API，再补应用层），不是改宏就能测。
+
 ---
 
 ## 16. 延伸阅读
