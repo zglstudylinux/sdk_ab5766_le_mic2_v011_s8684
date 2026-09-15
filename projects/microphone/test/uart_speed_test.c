@@ -108,6 +108,9 @@ static void frm_feed(frm_parser_t *p, u8 byte, void (*on_frame)(u8, u8, u8 *))
                 p->buf[0] = FRM_MAGIC0;
             }
         }
+    } else if (p->idx == 2) {
+        //cmd 字节: 此时 need 还是上一帧残留/0, 不能做帧尾判断, 只存储
+        p->buf[p->idx++] = byte;
     } else if (p->idx == 3) {
         if (byte > BLOCK_PAYLOAD) {         //非法长度, 重新找帧头
             p->idx = (byte == FRM_MAGIC0) ? 1 : 0;
@@ -115,7 +118,7 @@ static void frm_feed(frm_parser_t *p, u8 byte, void (*on_frame)(u8, u8, u8 *))
             return;
         }
         p->buf[p->idx++] = byte;
-        p->need = FRM_OVERHEAD + byte;
+        p->need = FRM_OVERHEAD + byte;      //len 到达后 need 才有效
     } else {
         p->buf[p->idx++] = byte;
         if (p->idx >= p->need) {
@@ -370,6 +373,55 @@ static const char *type_name(uart_hw_type_t type)
     return (type == UART_HW_HSUART) ? "HSUART" : "UART1 ";
 }
 
+//原始链路诊断(握手失败时): 持续发 55AA 裸流 30 秒并统计本板收到的一切,
+//结合从机侧 [SLAVE][RAW] 打印即可判定 断线/共地/跳线未拔/波特率/协议 层问题
+static void raw_diag_master(void)
+{
+    static const u8 pat[8] = {0x55, 0xAA, 0x55, 0xAA, 0x55, 0xAA, 0x55, 0xAA};
+    u8 rxb[32];
+    u8 first[16];
+    u32 sent = 0;
+    u32 recv = 0;
+    u32 t0 = tick_get();
+    u16 first_len = 0;
+
+    printf("[TEST] ERROR: no slave response! enter RAW diagnose 30s\n");
+    printf("[DIAG] sending raw 55AA stream, watch SLAVE board [SLAVE][RAW] log\n");
+    printf("[DIAG] keep dual-board wires connected, loopback jumper REMOVED\n");
+
+    while (!tick_check_expire(t0, 30000)) {
+        u16 i;
+        u16 n;
+
+        WDT_CLR();
+        msg_dequeue();
+        for (i = 0; i < 8; i++) {
+            uart_hw_putbyte(UART_HW_UART1, pat[i]);
+        }
+        sent += 8;
+
+        n = uart_hw_read(rxb, sizeof(rxb));
+        for (i = 0; i < n; i++) {
+            if (first_len < (u16)sizeof(first)) {
+                first[first_len] = rxb[i];
+                first_len++;
+            }
+        }
+        recv += n;
+        delay_ms(100);
+    }
+
+    printf("[DIAG] master sent=%u recv=%u first_rx:", sent, recv);
+    for (u16 i = 0; i < first_len; i++) {
+        printf(" %02x", first[i]);
+    }
+    printf("\n");
+    printf("[DIAG] recv=0          -> slave sent nothing back: see slave log\n");
+    printf("[DIAG] rx=55 aa 55 aa  -> own echo: loopback jumper still installed!\n");
+    printf("[DIAG] rx=a5 5a ...    -> slave frames arrived: protocol issue\n");
+    printf("[DIAG] rx=00/ff/garbage-> GND/baud mismatch\n");
+}
+
 //爬坡: 连续 2 档失败即停, best 记录最高无误码档
 static void ramp_phase(uart_hw_type_t type, const u32 *tbl, u8 cnt,
                        u32 *best_baud, u32 *best_thr)
@@ -428,10 +480,8 @@ static void master_flow(void)
     }
 
     if (!hello) {
-        printf("[TEST] ERROR: no slave response!\n");
-        printf("       check: 1) wiring A.PA0->B.PA1, B.PA0->A.PA1, GND-GND\n");
-        printf("              2) both boards flashed with this test fw\n");
-        printf("              3) peer board role = mic (this board = adapter)\n");
+        //握手失败 -> 原始链路诊断: 绕过协议层直接发裸字节, 从机侧同步打印收到的原始字节
+        raw_diag_master();
         while (1) {
             WDT_CLR();
             msg_dequeue();
@@ -524,6 +574,7 @@ static void slave_on_frame(u8 cmd, u8 len, u8 *payload)
         case CMD_HELLO_REQ:
             pl_tmp[0] = 1;                  //1 = slave
             send_frame(CMD_HELLO_RSP, pl_tmp, 1);
+            printf("[SLAVE] HELLO_REQ got, RSP sent\n");
             break;
 
         case CMD_BAUD_REQ:
@@ -579,6 +630,10 @@ static void slave_on_frame(u8 cmd, u8 len, u8 *payload)
 static void slave_flow(void)
 {
     u8 tmp[256];
+    u8 raw_buf[16];                     //原始链路诊断: 最近收到的字节样本
+    u16 raw_len = 0;
+    u32 raw_total = 0;
+    u32 raw_print_tick = 0;
 
     slave_cur_baud = TEST_BASE_BAUD;
     slave_last_rx_tick = tick_get();
@@ -596,6 +651,28 @@ static void slave_flow(void)
         }
         for (i = 0; i < n; i++) {
             frm_feed(&slave_parser, tmp[i], slave_on_frame);
+        }
+
+        //原始链路诊断: 基础波特率空闲期, 收到任何字节都记录并限流打印 hex
+        //(主机发什么这里就显示什么: 55aa=裸流诊断, a5 5a=协议帧, 00/ff=电平/波特率异常)
+        if ((n > 0) && (slave_cur_baud == TEST_BASE_BAUD) && !slave_stats.window_active &&
+            !pending_baud_switch && !pending_hs_switch) {
+            for (i = 0; i < n; i++) {
+                if (raw_len < (u16)sizeof(raw_buf)) {
+                    raw_buf[raw_len] = tmp[i];
+                    raw_len++;
+                }
+                raw_total++;
+            }
+            if (tick_check_expire(raw_print_tick, 1000)) {
+                raw_print_tick = tick_get();
+                printf("[SLAVE][RAW] total=%u last:", raw_total);
+                for (i = 0; i < raw_len; i++) {
+                    printf(" %02x", raw_buf[i]);
+                }
+                printf("\n");
+                raw_len = 0;
+            }
         }
 
         //波特率切换: 应答已发出, 延时后切
@@ -628,7 +705,9 @@ static void slave_flow(void)
         }
 
         //线路空闲超时自动回落到基础波特率, 供主机重新同步(如断链恢复/切换阶段)
-        if ((slave_cur_baud != TEST_BASE_BAUD) && !slave_stats.window_active &&
+        //只在 UART1 模式生效: HSUART 是测试目标, 空闲回落会改掉正在使用的测试波特率
+        if ((active_type == UART_HW_UART1) && (slave_cur_baud != TEST_BASE_BAUD) &&
+            !slave_stats.window_active &&
             tick_check_expire(slave_last_rx_tick, TEST_FALLBACK_IDLE_MS)) {
             uart_hw_set_baud(active_type, TEST_BASE_BAUD);
             slave_cur_baud = TEST_BASE_BAUD;
@@ -671,6 +750,7 @@ void func_uart_test(void)
         return;
     }
 
+#if UART_LOOPBACK_TEST_EN
     //第一步: 单板回环测试(跳线 PA0-PA1), 验证本板两路串口收发通路正常
     if (!uart_loopback_test_all()) {
         while (1) {
@@ -694,6 +774,21 @@ void func_uart_test(void)
             }
         }
     }
+#else
+    printf("\n[TEST] dual-board phase: wire A.PA0->B.PA1, B.PA0->A.PA1, GND-GND\n");
+    printf("[TEST] start in 3s...\n");
+    {
+        u8 i, j;
+
+        for (i = 3; i > 0; i--) {
+            printf("[TEST] %d...\n", i);
+            for (j = 0; j < 4; j++) {
+                WDT_CLR();
+                delay_ms(250);
+            }
+        }
+    }
+#endif
     uart_hw_init(UART_HW_UART1, TEST_BASE_BAUD);    //清掉回环残留数据, 重开双板通道
 
     if (is_master) {
