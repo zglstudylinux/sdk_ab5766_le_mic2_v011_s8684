@@ -417,6 +417,18 @@
 		<Unit filename="port/port_key.c">
 			<Option compilerVar="CC" />
 		</Unit>
+		<Unit filename="test/uart_loopback_test.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="test/uart_loopback_test.h" />
+		<Unit filename="test/uart_speed_test.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="test/uart_speed_test.h" />
+		<Unit filename="test/uart_test_hw.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="test/uart_test_hw.h" />
 		<Unit filename="ram.ld">
 			<Option compile="1" />
 			<Option compiler="riscv32-v3" use="1" buildCommand="$compiler $options $includes -E -P -x c -c $file -o $(TARGET_OBJECT_DIR)ram.o" />

@@ -84,9 +84,6 @@ SECTIONS
         __code_start_adapter_proc = .;
         *(.text.adapter.proc*)
         __code_end_adapter_proc = .;
-         __code_start_mic_mix = .;
-        *(.text.mic_mix_proc*)
-         __code_end_mic_mix = .;
         . = ALIGN(4);
     } > comm_adapter AT > flash
     .data_adapter (NOLOAD) : {
@@ -110,9 +107,6 @@ SECTIONS
         __buf_start_lc3dec = .;
         *(.buf.lc3_dec*)
         __buf_end_lc3dec = .;
-         __buf_start_mic_mix = .;
-        *(.buf.mic_mix*)
-         __buf_end_mic_mix = .;
         *(.buf.sddac*)
     } > comm_adapter
     .code_emit : {
@@ -128,10 +122,6 @@ SECTIONS
         *(.text.lc3_enc*)
         *(.rodata.lc3_enc*)
         __code_end_lc3enc = .;
-        __code_start_ains4_32k = .;
-        *(.text.ains4_32k_proc*)
-        *(.rodata.ains4_32k*)
-        __code_end_ains4_32k = .;
         __code_start_mic_emit_proc = .;
         *(.text.mic_emit.proc*)
         *(.rodata.mic_emit.proc*)
@@ -157,9 +147,6 @@ SECTIONS
         __buf_start_lc3enc = .;
         *(.buf.lc3_enc*)
         __buf_end_lc3enc = .;
-        __buf_start_ains4_32k = .;
-        *(.buf.ains4_32k*)
-        __buf_end_ains4_32k = .;
          __buf_start_mic_effect = .;
         *(.buf.mic_effect*)
          __buf_end_mic_effect = .;

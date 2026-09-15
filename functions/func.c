@@ -139,11 +139,15 @@ void func_run(void)
 {
     printf("%s\n", __func__);
 
+#if UART_SPEED_TEST_EN
+    func_cb.sta = FUNC_UART_TEST;                   //双板串口极限测试, 不启动无线/音频
+#else
     if (wireless_role_is_adapter()) {
         func_cb.sta = FUNC_ADAPTER;
     } else {
         func_cb.sta = FUNC_MIC_EMIT;
     }
+#endif
 
 #if FUNC_LE_DUT_EN
     func_cb.sta = FUNC_LE_DUT;
@@ -167,6 +171,12 @@ void func_run(void)
 #if FUNC_LE_DUT_EN
         case FUNC_LE_DUT:
             func_le_dut();
+            break;
+#endif
+
+#if UART_SPEED_TEST_EN
+        case FUNC_UART_TEST:
+            func_uart_test();
             break;
 #endif
 

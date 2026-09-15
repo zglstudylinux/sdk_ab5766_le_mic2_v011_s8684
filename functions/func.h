@@ -14,6 +14,7 @@ enum {
     FUNC_ADAPTER,
     FUNC_MIC_EMIT,
     FUNC_LE_DUT,
+    FUNC_UART_TEST,                                 //双板串口极限测试(test/uart_speed_test.c)
     FUNC_PWROFF,
     FUNC_IDLE,
 };
@@ -37,5 +38,6 @@ void func_bt(void);
 void func_le_fcc(void);
 void func_le_bqb_rf(void);
 void func_tbox(void);
+void func_uart_test(void);                          //test/uart_speed_test.c
 
 #endif
