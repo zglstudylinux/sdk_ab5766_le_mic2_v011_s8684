@@ -139,7 +139,9 @@ void func_run(void)
 {
     printf("%s\n", __func__);
 
-#if UART_SPEED_TEST_EN
+#if UART_HSUART_VENDOR_TEST_EN
+    func_cb.sta = FUNC_HSUART_VENDOR_TEST;          //原厂方法 HSUART 对照测试, 不启动无线/音频
+#elif UART_SPEED_TEST_EN
     func_cb.sta = FUNC_UART_TEST;                   //双板串口极限测试, 不启动无线/音频
 #else
     if (wireless_role_is_adapter()) {
@@ -174,7 +176,11 @@ void func_run(void)
             break;
 #endif
 
-#if UART_SPEED_TEST_EN
+#if UART_HSUART_VENDOR_TEST_EN
+        case FUNC_HSUART_VENDOR_TEST:
+            hsvendor_uart_test();
+            break;
+#elif UART_SPEED_TEST_EN
         case FUNC_UART_TEST:
             func_uart_test();
             break;

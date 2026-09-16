@@ -417,6 +417,10 @@
 		<Unit filename="port/port_key.c">
 			<Option compilerVar="CC" />
 		</Unit>
+		<Unit filename="test/hsuart_vendor_test.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="test/hsuart_vendor_test.h" />
 		<Unit filename="test/uart_loopback_test.c">
 			<Option compilerVar="CC" />
 		</Unit>
