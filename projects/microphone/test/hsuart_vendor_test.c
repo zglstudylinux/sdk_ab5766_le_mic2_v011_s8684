@@ -37,6 +37,8 @@
 #define VTEST_RX_PIN                GPIO_PA1
 
 #define V_X24M_MAX                  1500000     //<=此档用 X24M(已验证域), >此档切 X48M
+//实验宏: 1=HSUART 全阶梯强制 X24M(验证 X24M 高档位表现, 用户指定实验), 0=按 V_X24M_MAX 分档
+#define VTEST_HS_FORCE_X24M         1
 #define V_BAUD_BASE                 115200      //握手基础波特率
 #define V_WINDOW_MS                 2000        //每档发送窗口
 #define V_HELLO_TIMEOUT_MS          15000       //主机等握手总超时
@@ -288,7 +290,11 @@ static void v_hs_init(u32 baud)
 
     //时钟源按档位: X48M 档必须先开 CLK_GATE2_X48M 门控(复位默认关, 不开则外设无时钟)
     clk_gate2_cmd(CLK_GATE2_X48M, CLK_EN);
+#if VTEST_HS_FORCE_X24M
+    clk_hsut0_clk_set(CLK_HSUT0_XOSC24M);       //实验: 全阶梯强制 X24M
+#else
     clk_hsut0_clk_set((baud > V_X24M_MAX) ? CLK_HSUT0_XOSC48M : CLK_HSUT0_XOSC24M);
+#endif
     printf("[VT] hsuart clk idx=%d freq=%d\n",
            (int)clk_hsut0_clk_get(CLK_VALUE_MODE_IDX), (int)clk_hsut0_clk_get(CLK_VALUE_MODE_FREQ));
 
@@ -333,7 +339,11 @@ static void v_stat_reset(void)
 static void v_port_set_baud(u32 baud)
 {
     if (VTEST_PORT == VPORT_HS) {
+#if VTEST_HS_FORCE_X24M
+        u8 need48 = 0;                          //实验: 全阶梯强制 X24M
+#else
         u8 need48 = (baud > V_X24M_MAX) ? 1 : 0;
+#endif
 
         if (need48 == v_hs_cur48) {
             huart_set_baudrate(baud);       //原厂库: 驱动按当前时钟源自动算分频
@@ -804,7 +814,11 @@ void hsvendor_uart_test(void)
     sys_clk_set(SYS_120M);
     printf("[VT] ===== single-port 12M ladder (bsp/driver lib) =====\n");
     printf("[VT] port=%s ladder: 460800..12M, window 2s\n", VTEST_PORT_NAME);
+#if VTEST_HS_FORCE_X24M
+    printf("[VT] clk: X24M all steps (EXPERIMENT, oversampling test)\n");
+#else
     printf("[VT] clk: X24M <=1.5M, X48M >1.5M, re-init per step\n");
+#endif
 
     is_master = wireless_role_is_adapter();
     printf("[VT] role=%s (adapter=master)\n", is_master ? "MASTER" : "SLAVE");
