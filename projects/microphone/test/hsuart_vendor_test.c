@@ -39,6 +39,8 @@
 #define V_X24M_MAX                  1500000     //<=此档用 X24M(已验证域), >此档切 X48M
 //实验宏: 1=HSUART 全阶梯强制 X24M(验证 X24M 高档位表现, 用户指定实验), 0=按 V_X24M_MAX 分档
 #define VTEST_HS_FORCE_X24M         1
+//实验宏: 1=UART1 全阶梯强制 X24M(对照实验, 用户指定), 0=按 V_X24M_MAX 分档
+#define VTEST_UART1_FORCE_X24M      1
 #define V_BAUD_BASE                 115200      //握手基础波特率
 #define V_WINDOW_MS                 2000        //每档发送窗口
 #define V_HELLO_TIMEOUT_MS          15000       //主机等握手总超时
@@ -354,7 +356,11 @@ static void v_port_set_baud(u32 baud)
     } else {
         v_uart1_deinit();
         clk_gate2_cmd(CLK_GATE2_X48M, CLK_EN);
+#if VTEST_UART1_FORCE_X24M
+        clk_uart_clk_set(UART1_REG, CLK_UART_XOSC24M);      //实验: 全阶梯强制 X24M
+#else
         clk_uart_clk_set(UART1_REG, (baud > V_X24M_MAX) ? CLK_UART_XOSC48M : CLK_UART_XOSC24M);
+#endif
         v_uart1_init(baud);
     }
 
@@ -814,8 +820,10 @@ void hsvendor_uart_test(void)
     sys_clk_set(SYS_120M);
     printf("[VT] ===== single-port 12M ladder (bsp/driver lib) =====\n");
     printf("[VT] port=%s ladder: 460800..12M, window 2s\n", VTEST_PORT_NAME);
-#if VTEST_HS_FORCE_X24M
+#if UART_TEST_PORT_SEL && VTEST_HS_FORCE_X24M
     printf("[VT] clk: X24M all steps (EXPERIMENT, oversampling test)\n");
+#elif !UART_TEST_PORT_SEL && VTEST_UART1_FORCE_X24M
+    printf("[VT] clk: X24M all steps (EXPERIMENT, UART1)\n");
 #else
     printf("[VT] clk: X24M <=1.5M, X48M >1.5M, re-init per step\n");
 #endif
