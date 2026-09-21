@@ -27,6 +27,7 @@
 #define UART_SPEED_TEST_EN              1                       //双板串口极限测试(UART1+HSUART 分时复用PA0/PA1), 测完改0
 #define UART_HSUART_VENDOR_TEST_EN      1                       //原厂方法 HSUART 对照测试(test/hsuart_vendor_test.c), 1=优先于旧测试, 0=恢复旧测试
 #define UART_TEST_PORT_SEL              1                       //分口测试端口选择: 0=普通串口 UART1, 1=高速串口 HSUART
+#define UART_CH340_TEST_EN              1                       //单板 CH340 普通串口极限测试(test/uart_ch340_test.c + PC 脚本 ch340_uart_test.ps1), 1=优先于双板测试
 #define UART_LOOPBACK_TEST_EN           0                       //双板测试前的单板回环自检(PA0-PA1跳线), 1=先回环后双板
 #define BSP_ADKEY_EN                    1                       //AD按键使能[Default: PB0]
 #define BSP_IOKEY_EN                    0                       //IO按鍵使能[WK0:PP]
