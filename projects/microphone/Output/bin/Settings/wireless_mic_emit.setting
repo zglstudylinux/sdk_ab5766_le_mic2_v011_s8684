@@ -21,7 +21,7 @@
         <add key="wireless_mic_emit_en" value="True" />
         <add key="sys_off_time" value="0" />
         <add key="poweron_first_bat_en" value="True" />
-        <add key="poweron_vusb_out_en" value="False" />
+        <add key="poweron_vusb_out_en" value="True" />
         <add key="lpwr_warning_vbat_level" value="不提示" />
         <add key="lpwr_off_vbat_level" value="3.1V" />
         <add key="buck_mode_en" value="False" />

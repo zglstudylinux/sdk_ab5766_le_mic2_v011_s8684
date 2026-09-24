@@ -42,6 +42,9 @@ void func_adapter_message(u16 msg)
 #if WIRELESS_MIC_DUMP_PER_BER
         wireless_mic_dump();
 #endif
+#if BSP_VBAT_DETECT_EN
+        bsp_vbat_proc(); // 充电仓测试: 接收端 1s 周期电量检测与打印
+#endif
         break;
     default:
         func_message(msg);

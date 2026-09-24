@@ -22,21 +22,21 @@
 #define WK0_10S_RESET                   0                       //WK pin 10秒复位功能
 #define SYS_PWROFF_MODE                 PWROFF_MODE2            //软关机模式选择，模式1 VDDIO掉电，模式2 VDDIO不掉电
 #define BSP_UART_DEBUG_EN               GPIO_PB3                //串口打印调试使能[Baud=1500000]（注意: 配置工具的蓝灯IO不能选PB3, 会冲突）
-#define BSP_UART_TRANSFER_EN            1                       //UART1 双线串口收发使能(PA0=TX, PA1=RX)
+#define BSP_UART_TRANSFER_EN            0                       //UART1 双线串口收发使能(PA0=TX, PA1=RX)
 #define BSP_UART_TRANSFER_BAUD          115200                  //UART1 transfer 波特率[8N1]
-#define UART_SPEED_TEST_EN              1                       //双板串口极限测试(UART1+HSUART 分时复用PA0/PA1), 测完改0
-#define UART_HSUART_VENDOR_TEST_EN      1                       //原厂方法 HSUART 对照测试(test/hsuart_vendor_test.c), 1=优先于旧测试, 0=恢复旧测试
+#define UART_SPEED_TEST_EN              0                       //双板串口极限测试(UART1+HSUART 分时复用PA0/PA1), 测完改0
+#define UART_HSUART_VENDOR_TEST_EN      0                       //原厂方法 HSUART 对照测试(test/hsuart_vendor_test.c), 1=优先于旧测试, 0=恢复旧测试
 #define UART_TEST_PORT_SEL              1                       //分口测试端口选择: 0=普通串口 UART1, 1=高速串口 HSUART
-#define UART_CH340_TEST_EN              1                       //单板 CH340 普通串口极限测试(test/uart_ch340_test.c + PC 脚本 ch340_uart_test.ps1), 1=优先于双板测试
+#define UART_CH340_TEST_EN              0                       //单板 CH340 普通串口极限测试(test/uart_ch340_test.c + PC 脚本 ch340_uart_test.ps1), 1=优先于双板测试
 #define UART_LOOPBACK_TEST_EN           0                       //双板测试前的单板回环自检(PA0-PA1跳线), 1=先回环后双板
 #define BSP_ADKEY_EN                    1                       //AD按键使能[Default: PB0]
 #define BSP_IOKEY_EN                    0                       //IO按鍵使能[WK0:PP]
 #define BSP_CHARGE_EN                   1                       //充电功能使能
-#define BSP_CHARGE_BOX_EN               0                       //是否支持充电仓功能
+#define BSP_CHARGE_BOX_EN               1                       //是否支持充电仓功能
 #define BSP_TSEN_EN                     0                       //内置温度传感器采集功能
 #define BSP_LED_EN                      1                       //LED灯控制使能, 配置工具的蓝灯跟红灯IO选一样时, 一个IO推两个灯
 #define BSP_DLED_EN                     0                       //自定义一个IO推两个灯, 配置工具的蓝灯跟红灯IO选一样
-#define BSP_VBAT_DETECT_EN              0                       //电池电量检测
+#define BSP_VBAT_DETECT_EN              1                       //电池电量检测
 
 /*****************************************************************************
  * Module    : FLASH配置

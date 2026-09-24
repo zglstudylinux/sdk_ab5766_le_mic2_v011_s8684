@@ -112,6 +112,7 @@ bool bsp_vbat_proc(void)
     uint32_t adc_vbg;
     uint32_t vbat_cur;
     uint16_t diff;
+    static u32 vbat_1s_tick = 0;
 
     if (saradc_get_channel_flag(ADC_CHANNEL_VBAT | ADC_CHANNEL_VBG)) {
         adc_val = saradc_get_data(ADC_CHANNEL_VBAT);
@@ -127,6 +128,11 @@ bool bsp_vbat_proc(void)
             vbat_voltage = vbat_cur;
         }
         saradc_kick_start(ADC_CHANNEL_VBAT | ADC_CHANNEL_VBG);
+
+    if (tick_check_expire(vbat_1s_tick, 1000)) { // 充电仓测试: 1s 周期打印电池电压(mV), 便于对照万用表
+        vbat_1s_tick = tick_get();
+        printf("[vbat] %d mV\n", vbat_voltage);
+    }
 
         bsp_vbat_lowpwr_detect();
 

@@ -62,10 +62,10 @@
         <add key="led_connected_cycle" value="86" />
         <add key="huart_en" value="False" />
         <add key="huart_io_sel" value="179" />
-        <add key="charge_en" value="False" />
+        <add key="charge_en" value="True" />
         <add key="charge_trick_en" value="True" />
         <add key="charge_dc_not_pwron" value="True" />
-        <add key="charge_working_while_charging" value="False" />
+        <add key="charge_working_while_charging" value="True" />
         <add key="charge_stop_curr" value="30mA" />
         <add key="charge_constant_curr" value="40mA" />
         <add key="charge_trickle_curr" value="20mA" />
@@ -79,6 +79,6 @@
         <add key="double_key_time" value="5" />
         <add key="mic_dig_gain" value="0" />
         <add key="dac_sel" value="1" />
-        <add key="ch_box_type" value="0" />
+        <add key="ch_box_type" value="1" />
     </appSettings>
 </configuration>
